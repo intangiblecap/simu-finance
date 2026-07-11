@@ -1,0 +1,39 @@
+import type { Archetype, ArchetypeInfo } from '../types'
+
+export const ARCHETYPES: Record<Archetype, ArchetypeInfo> = {
+  centenaire: {
+    label: 'Bananeraie centenaire',
+    icon: '🌳',
+    tagline: 'Stable et généreuse',
+    description:
+      "Plantée depuis des générations de singes. Son prix bouge peu et elle reverse chaque saison un petit bonus de bananes à qui possède des branches : c'est ce qu'on appelle un dividende.",
+  },
+  startup: {
+    label: 'Jeune pousse ambitieuse',
+    icon: '🌱',
+    tagline: 'Risquée, promesses de gloire',
+    description:
+      "Un tout jeune bananier plein d'ambition. Son prix peut grimper très vite... ou s'effondrer tout aussi vite. Aucun dividende : tout se joue sur le prix de la branche.",
+  },
+  industrielle: {
+    label: 'Bananeraie industrielle',
+    icon: '🏭',
+    tagline: 'Des hauts et des bas réguliers',
+    description:
+      "Une grande exploitation qui suit les saisons de production : des cycles de hausse puis de baisse, assez prévisibles mais jamais figés.",
+  },
+  labo: {
+    label: 'Labo de greffage',
+    icon: '🧪',
+    tagline: "Coups de génie ou échecs",
+    description:
+      "Des chercheurs y inventent de nouvelles variétés de bananes. Ça peut déboucher sur une découverte spectaculaire... ou ne mener nulle part. Prix très imprévisible.",
+  },
+  familiale: {
+    label: 'Petite bananeraie familiale',
+    icon: '🏡',
+    tagline: 'Calme et discrète',
+    description:
+      "Une petite exploitation isolée où peu de singes viennent échanger des branches. Son prix bouge à peine, saison après saison.",
+  },
+}

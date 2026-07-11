@@ -1,0 +1,62 @@
+:root {
+  color-scheme: light;
+  --savanna-sky: #fff8e7;
+  --savanna-sky-2: #ffedc2;
+  --savanna-green-dark: #2f6b3c;
+  --savanna-green: #4c9a5b;
+  --savanna-green-light: #eaf5ea;
+  --banana-yellow: #ffc94a;
+  --banana-yellow-dark: #e6a72e;
+  --positive: #2f8f4e;
+  --negative: #c0392b;
+  --card-bg: #ffffff;
+  --card-border: #e7dcc3;
+  --text-main: #3a2e1f;
+  --text-muted: #7a6a52;
+  --shadow: 0 4px 14px rgba(76, 57, 20, 0.12);
+
+  font-family: 'Segoe UI', 'Trebuchet MS', system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  background: linear-gradient(180deg, var(--savanna-sky) 0%, var(--savanna-sky-2) 100%);
+  color: var(--text-main);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  color: var(--savanna-green-dark);
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
