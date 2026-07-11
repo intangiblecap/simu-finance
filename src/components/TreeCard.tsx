@@ -3,6 +3,7 @@ import type { BananaTree } from '../types'
 import type { HoldingView } from '../game/useGame'
 import { ARCHETYPES } from '../data/archetypes'
 import { Sparkline } from './Sparkline'
+import { ArchetypeIcon, Banana, BananaAmount } from './icons'
 
 interface TreeCardProps {
   tree: BananaTree
@@ -27,8 +28,8 @@ export function TreeCard({ tree, holding, cash, onBuy, onSell }: TreeCardProps) 
   return (
     <div className="tree-card">
       <div className="tree-card-header">
-        <span className="tree-icon" aria-hidden="true">
-          {info.icon}
+        <span className={`tree-icon-badge badge-${tree.archetype}`}>
+          <ArchetypeIcon archetype={tree.archetype} size={26} />
         </span>
         <div>
           <h3>{tree.name}</h3>
@@ -49,7 +50,9 @@ export function TreeCard({ tree, holding, cash, onBuy, onSell }: TreeCardProps) 
 
       <div className="tree-price-row">
         <div>
-          <span className="price-value">{tree.price.toFixed(2)} 🍌</span>
+          <span className="price-value">
+            <BananaAmount value={tree.price} />
+          </span>
           <span className="price-label">prix de la branche</span>
         </div>
         <Sparkline history={tree.history} />
@@ -59,11 +62,10 @@ export function TreeCard({ tree, holding, cash, onBuy, onSell }: TreeCardProps) 
         <div className="tree-holding">
           <span>
             Tu possèdes <strong>{holding.shares}</strong> branche(s), achetées en moyenne à{' '}
-            {holding.avgPrice.toFixed(2)} 🍌
+            <BananaAmount value={holding.avgPrice} />
           </span>
           <span className={gainClass}>
-            {holding.gain >= 0 ? '+' : ''}
-            {holding.gain.toFixed(2)} 🍌 ({holding.gainPct >= 0 ? '+' : ''}
+            <BananaAmount value={holding.gain} showSign /> ({holding.gainPct >= 0 ? '+' : ''}
             {holding.gainPct.toFixed(1)}%)
           </span>
         </div>
@@ -87,7 +89,7 @@ export function TreeCard({ tree, holding, cash, onBuy, onSell }: TreeCardProps) 
             onClick={() => onBuy(tree.id, quantity)}
             title={`Coûte ${cost.toFixed(2)} bananes`}
           >
-            Acheter ({cost.toFixed(2)} 🍌)
+            Acheter ({cost.toFixed(2)} <Banana />)
           </button>
           <button
             type="button"

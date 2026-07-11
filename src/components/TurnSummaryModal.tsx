@@ -1,4 +1,5 @@
 import type { TurnSummary } from '../types'
+import { Banana, BananaAmount, SeasonIcon, TrendDownIcon, TrendFlatIcon, TrendUpIcon } from './icons'
 
 interface TurnSummaryModalProps {
   summary: TurnSummary
@@ -13,17 +14,21 @@ export function TurnSummaryModal({ summary, onClose }: TurnSummaryModalProps) {
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <div className="modal">
-        <h2>🌤️ Saison {summary.season}</h2>
+        <h2 className="modal-title">
+          <SeasonIcon size={28} /> Saison {summary.season}
+        </h2>
 
         <div className="summary-section">
-          <h3>📈 En hausse</h3>
+          <h3>
+            <TrendUpIcon className="positive" /> En hausse
+          </h3>
           {gainers.length === 0 ? (
             <p className="summary-empty">Aucun bananier n'a monté cette saison.</p>
           ) : (
             <ul>
               {gainers.map((c) => (
                 <li key={c.treeId} className="positive">
-                  {c.name} : {c.oldPrice.toFixed(2)} → {c.newPrice.toFixed(2)} 🍌 (+
+                  {c.name} : {c.oldPrice.toFixed(2)} → <BananaAmount value={c.newPrice} /> (+
                   {c.pctChange.toFixed(1)}%)
                 </li>
               ))}
@@ -32,14 +37,16 @@ export function TurnSummaryModal({ summary, onClose }: TurnSummaryModalProps) {
         </div>
 
         <div className="summary-section">
-          <h3>📉 En baisse</h3>
+          <h3>
+            <TrendDownIcon className="negative" /> En baisse
+          </h3>
           {losers.length === 0 ? (
             <p className="summary-empty">Aucun bananier n'a baissé cette saison.</p>
           ) : (
             <ul>
               {losers.map((c) => (
                 <li key={c.treeId} className="negative">
-                  {c.name} : {c.oldPrice.toFixed(2)} → {c.newPrice.toFixed(2)} 🍌 (
+                  {c.name} : {c.oldPrice.toFixed(2)} → <BananaAmount value={c.newPrice} /> (
                   {c.pctChange.toFixed(1)}%)
                 </li>
               ))}
@@ -49,17 +56,23 @@ export function TurnSummaryModal({ summary, onClose }: TurnSummaryModalProps) {
 
         {flat.length > 0 && (
           <div className="summary-section">
-            <h3>➖ Stables</h3>
+            <h3>
+              <TrendFlatIcon /> Stables
+            </h3>
             <ul>
               {flat.map((c) => (
-                <li key={c.treeId}>{c.name} : {c.newPrice.toFixed(2)} 🍌 (inchangé)</li>
+                <li key={c.treeId}>
+                  {c.name} : <BananaAmount value={c.newPrice} /> (inchangé)
+                </li>
               ))}
             </ul>
           </div>
         )}
 
         <div className="summary-section">
-          <h3>🍌 Dividendes reçus</h3>
+          <h3>
+            <Banana size={18} /> Dividendes reçus
+          </h3>
           {summary.dividends.length === 0 ? (
             <p className="summary-empty">Aucun dividende ce tour-ci.</p>
           ) : (
@@ -67,12 +80,12 @@ export function TurnSummaryModal({ summary, onClose }: TurnSummaryModalProps) {
               <ul>
                 {summary.dividends.map((d) => (
                   <li key={d.treeId}>
-                    {d.name} t'a versé {d.amount.toFixed(2)} 🍌
+                    {d.name} t'a versé <BananaAmount value={d.amount} />
                   </li>
                 ))}
               </ul>
               <p className="summary-total">
-                Total touché : <strong>{summary.totalDividends.toFixed(2)} 🍌</strong>
+                Total touché : <strong><BananaAmount value={summary.totalDividends} /></strong>
               </p>
             </>
           )}

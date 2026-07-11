@@ -1,3 +1,5 @@
+import { ArrowRightIcon, BananaAmount, MonkeyMascot } from './icons'
+
 interface HeaderProps {
   season: number
   cash: number
@@ -9,8 +11,8 @@ export function Header({ season, cash, totalWealth, onNextSeason }: HeaderProps)
   return (
     <header className="game-header">
       <div className="game-title">
-        <span className="game-title-icon" aria-hidden="true">
-          🐒
+        <span className="game-title-icon">
+          <MonkeyMascot size={48} />
         </span>
         <div>
           <h1>La Savane des Bananiers</h1>
@@ -25,14 +27,18 @@ export function Header({ season, cash, totalWealth, onNextSeason }: HeaderProps)
         </div>
         <div className="stat">
           <span className="stat-label">Bananes liquides</span>
-          <span className="stat-value">{cash.toFixed(2)} 🍌</span>
+          <span className="stat-value">
+            <BananaAmount value={cash} />
+          </span>
         </div>
         <div className="stat">
           <span className="stat-label">Patrimoine total</span>
-          <span className="stat-value">{totalWealth.toFixed(2)} 🍌</span>
+          <span className="stat-value">
+            <BananaAmount value={totalWealth} />
+          </span>
         </div>
         <button type="button" className="primary-button next-season-button" onClick={onNextSeason}>
-          Saison suivante ➡️
+          Saison suivante <ArrowRightIcon size={18} />
         </button>
       </div>
     </header>

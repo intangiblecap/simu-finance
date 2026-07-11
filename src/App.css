@@ -27,8 +27,11 @@
 }
 
 .game-title-icon {
-  font-size: 44px;
-  line-height: 1;
+  display: flex;
+  flex-shrink: 0;
+  background: var(--savanna-green-light);
+  border-radius: 999px;
+  padding: 8px;
 }
 
 .game-title h1 {
@@ -69,6 +72,9 @@
 }
 
 .primary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   background: var(--banana-yellow);
   border: 2px solid var(--banana-yellow-dark);
   color: #4f3620;
@@ -128,8 +134,34 @@
   gap: 10px;
 }
 
-.tree-icon {
-  font-size: 32px;
+.tree-icon-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+}
+
+.badge-centenaire {
+  background: #e3f0e5;
+}
+
+.badge-startup {
+  background: #e6f5e2;
+}
+
+.badge-industrielle {
+  background: #f1e9d6;
+}
+
+.badge-labo {
+  background: #e2f4f4;
+}
+
+.badge-familiale {
+  background: #f5e8da;
 }
 
 .tree-card-header h3 {
@@ -364,8 +396,17 @@
 }
 
 .summary-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 14px;
   margin-bottom: 6px;
+}
+
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .summary-section ul {

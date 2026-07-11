@@ -7,7 +7,6 @@ export type Archetype =
 
 export interface ArchetypeInfo {
   label: string
-  icon: string
   tagline: string
   description: string
 }

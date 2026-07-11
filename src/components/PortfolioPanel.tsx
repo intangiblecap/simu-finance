@@ -1,4 +1,5 @@
 import type { HoldingView } from '../game/useGame'
+import { BananaAmount } from './icons'
 
 interface PortfolioPanelProps {
   holdings: HoldingView[]
@@ -13,11 +14,15 @@ export function PortfolioPanel({ holdings, cash, totalWealth }: PortfolioPanelPr
       <div className="portfolio-totals">
         <div>
           <span className="portfolio-total-label">Bananes liquides</span>
-          <span className="portfolio-total-value">{cash.toFixed(2)} 🍌</span>
+          <span className="portfolio-total-value">
+            <BananaAmount value={cash} />
+          </span>
         </div>
         <div>
           <span className="portfolio-total-label">Valeur totale</span>
-          <span className="portfolio-total-value">{totalWealth.toFixed(2)} 🍌</span>
+          <span className="portfolio-total-value">
+            <BananaAmount value={totalWealth} />
+          </span>
         </div>
       </div>
 
@@ -43,12 +48,17 @@ export function PortfolioPanel({ holdings, cash, totalWealth }: PortfolioPanelPr
                 <tr key={h.treeId}>
                   <td>{h.name}</td>
                   <td>{h.shares}</td>
-                  <td>{h.avgPrice.toFixed(2)} 🍌</td>
-                  <td>{h.currentPrice.toFixed(2)} 🍌</td>
-                  <td>{h.currentValue.toFixed(2)} 🍌</td>
+                  <td>
+                    <BananaAmount value={h.avgPrice} />
+                  </td>
+                  <td>
+                    <BananaAmount value={h.currentPrice} />
+                  </td>
+                  <td>
+                    <BananaAmount value={h.currentValue} />
+                  </td>
                   <td className={h.gain >= 0 ? 'positive' : 'negative'}>
-                    {h.gain >= 0 ? '+' : ''}
-                    {h.gain.toFixed(2)} 🍌 ({h.gainPct >= 0 ? '+' : ''}
+                    <BananaAmount value={h.gain} showSign /> ({h.gainPct >= 0 ? '+' : ''}
                     {h.gainPct.toFixed(1)}%)
                   </td>
                 </tr>
