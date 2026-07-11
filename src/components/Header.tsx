@@ -34,7 +34,7 @@ export function Header({ season, cash, totalWealth, onNextSeason }: HeaderProps)
         <div className="stat">
           <span className="stat-label">Patrimoine total</span>
           <span className="stat-value">
-            <BananaAmount value={totalWealth} />
+            <BananaAmount value={totalWealth} variant="bunch" />
           </span>
         </div>
         <button type="button" className="primary-button next-season-button" onClick={onNextSeason}>

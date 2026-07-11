@@ -3,7 +3,11 @@ interface IconProps {
   className?: string
 }
 
-/** Small currency glyph used inline next to every banana amount. */
+/**
+ * Small currency glyph used inline next to a single amount: one thick curved
+ * banana bar. Deliberately a single stroke, so it never gets mistaken for the
+ * multi-bar BananaBunch used for aggregate totals.
+ */
 export function Banana({ size = 16, className }: IconProps) {
   return (
     <svg
@@ -12,23 +16,99 @@ export function Banana({ size = 16, className }: IconProps) {
       viewBox="0 0 24 24"
       className={className}
       aria-hidden="true"
-      style={{ verticalAlign: '-2px', flexShrink: 0 }}
+      style={{ verticalAlign: '-3px', flexShrink: 0 }}
     >
       <path
-        d="M6.5 19.5c-1.6-1.9-2.2-4.4-1.7-7.4C5.6 7.9 8.9 4.6 13.5 3.4c.9-.2 1.9-.4 3-.4.3 1.4.1 2.7-.6 4-1.1 2-3 3.3-5 4.5-2.7 1.6-4.9 3.6-6 6.4-.3.7-.4 1.2-.4 1.6z"
-        fill="#ffc94a"
-        stroke="#e6a72e"
-        strokeWidth="1"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M15.8 3.6c.9.1 1.6.5 2.1 1.2"
+        d="M5.5 19 Q6 7.5 17.5 5"
         fill="none"
-        stroke="#8a6a2f"
-        strokeWidth="1.1"
+        stroke="#ffc94a"
+        strokeWidth="5"
         strokeLinecap="round"
       />
+      <circle cx="17.5" cy="5" r="1.9" fill="#8a6a2f" />
     </svg>
+  )
+}
+
+/**
+ * A hand of bananas fanning from a shared stem — used for aggregate/total
+ * amounts (patrimoine, capitalisation, valeur d'une ligne). Three bars
+ * radiating from one point reads unambiguously as "more than one", unlike
+ * the single-bar Banana used for liquid cash and per-unit prices.
+ */
+export function BananaBunch({ size = 20, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={(size * 20) / 26}
+      viewBox="0 0 26 20"
+      className={className}
+      aria-hidden="true"
+      style={{ verticalAlign: '-4px', flexShrink: 0 }}
+    >
+      <path d="M13 3 Q6 6 4 17" fill="none" stroke="#e6a72e" strokeWidth="4.2" strokeLinecap="round" />
+      <path d="M13 3 Q13 10 13 18" fill="none" stroke="#ffd668" strokeWidth="4.2" strokeLinecap="round" />
+      <path d="M13 3 Q20 6 22 17" fill="none" stroke="#ffc94a" strokeWidth="4.2" strokeLinecap="round" />
+      <circle cx="13" cy="3" r="2.3" fill="#8a6a2f" />
+    </svg>
+  )
+}
+
+/** A small forked twig — represents the branches a company has in circulation. */
+export function BranchesIcon({ size = 16, className }: IconProps) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      className={className}
+      aria-hidden="true"
+      style={{ verticalAlign: '-3px', flexShrink: 0 }}
+    >
+      <path
+        d="M12 21V9M12 9C7 9 6 6 6.5 3M12 9c5 0 6-3 5.5-6"
+        fill="none"
+        stroke="#7a5230"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <ellipse cx="6" cy="3.4" rx="2.6" ry="1.7" fill="#4c9a5b" transform="rotate(-28 6 3.4)" />
+      <ellipse cx="18" cy="3.4" rx="2.6" ry="1.7" fill="#4c9a5b" transform="rotate(28 18 3.4)" />
+    </svg>
+  )
+}
+
+const RISK_COLORS = ['#4c9a5b', '#e6a72e', '#c0392b']
+const LIQUIDITY_COLOR = '#2f8f8f'
+
+/** Three-segment gauge: how much a tree's price swings from one season to the next. */
+export function RiskMeter({ level }: { level: 1 | 2 | 3 }) {
+  return (
+    <span className="meter" role="img" aria-label={`Risque ${level}/3`}>
+      {[1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className="meter-bar"
+          style={{ background: i <= level ? RISK_COLORS[level - 1] : undefined }}
+        />
+      ))}
+    </span>
+  )
+}
+
+/** Three-segment gauge: how easily branches of this tree change hands. */
+export function LiquidityMeter({ level }: { level: 1 | 2 | 3 }) {
+  return (
+    <span className="meter" role="img" aria-label={`Liquidité ${level}/3`}>
+      {[1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className="meter-bar"
+          style={{ background: i <= level ? LIQUIDITY_COLOR : undefined }}
+        />
+      ))}
+    </span>
   )
 }
 
@@ -184,13 +264,26 @@ export function ArrowRightIcon({ size = 16, className }: IconProps) {
   )
 }
 
-/** Formats a banana amount consistently: "12.50" + the currency glyph. */
-export function BananaAmount({ value, showSign = false }: { value: number; showSign?: boolean }) {
+/**
+ * Formats a banana amount consistently: "12.50" + a currency glyph.
+ * Use variant="bunch" for aggregate totals (patrimoine, capitalisation, valeur
+ * d'une ligne) and the default single banana for liquid cash and per-unit prices,
+ * so the two are never visually interchangeable.
+ */
+export function BananaAmount({
+  value,
+  showSign = false,
+  variant = 'single',
+}: {
+  value: number
+  showSign?: boolean
+  variant?: 'single' | 'bunch'
+}) {
   const sign = showSign && value >= 0 ? '+' : ''
   return (
     <>
       {sign}
-      {value.toFixed(2)} <Banana />
+      {value.toFixed(2)} {variant === 'bunch' ? <BananaBunch /> : <Banana />}
     </>
   )
 }

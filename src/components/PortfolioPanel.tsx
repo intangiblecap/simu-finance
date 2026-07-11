@@ -21,7 +21,7 @@ export function PortfolioPanel({ holdings, cash, totalWealth }: PortfolioPanelPr
         <div>
           <span className="portfolio-total-label">Valeur totale</span>
           <span className="portfolio-total-value">
-            <BananaAmount value={totalWealth} />
+            <BananaAmount value={totalWealth} variant="bunch" />
           </span>
         </div>
       </div>
@@ -55,7 +55,7 @@ export function PortfolioPanel({ holdings, cash, totalWealth }: PortfolioPanelPr
                     <BananaAmount value={h.currentPrice} />
                   </td>
                   <td>
-                    <BananaAmount value={h.currentValue} />
+                    <BananaAmount value={h.currentValue} variant="bunch" />
                   </td>
                   <td className={h.gain >= 0 ? 'positive' : 'negative'}>
                     <BananaAmount value={h.gain} showSign /> ({h.gainPct >= 0 ? '+' : ''}

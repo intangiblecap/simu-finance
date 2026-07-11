@@ -5,10 +5,17 @@ export type Archetype =
   | 'labo'
   | 'familiale'
 
+export type RiskLevel = 1 | 2 | 3
+export type LiquidityLevel = 1 | 2 | 3
+
 export interface ArchetypeInfo {
   label: string
   tagline: string
   description: string
+  risk: RiskLevel
+  riskLabel: string
+  liquidity: LiquidityLevel
+  liquidityLabel: string
 }
 
 export interface BananaTree {

@@ -3,7 +3,7 @@ import type { BananaTree } from '../types'
 import type { HoldingView } from '../game/useGame'
 import { ARCHETYPES } from '../data/archetypes'
 import { Sparkline } from './Sparkline'
-import { ArchetypeIcon, Banana, BananaAmount } from './icons'
+import { ArchetypeIcon, Banana, BananaAmount, BranchesIcon, LiquidityMeter, RiskMeter } from './icons'
 
 interface TreeCardProps {
   tree: BananaTree
@@ -24,6 +24,7 @@ export function TreeCard({ tree, holding, cash, onBuy, onSell }: TreeCardProps) 
   const canSell = quantity > 0 && quantity <= ownedShares
 
   const gainClass = holding ? (holding.gain >= 0 ? 'positive' : 'negative') : ''
+  const marketCap = Math.round(tree.totalShares * tree.price * 100) / 100
 
   return (
     <div className="tree-card">
@@ -56,6 +57,36 @@ export function TreeCard({ tree, holding, cash, onBuy, onSell }: TreeCardProps) 
           <span className="price-label">prix de la branche</span>
         </div>
         <Sparkline history={tree.history} />
+      </div>
+
+      <div className="tree-facts">
+        <div className="tree-fact">
+          <span className="tree-fact-label">
+            Bananes qui poussent
+            <span className="tree-fact-sublabel">(valeur de l'entreprise)</span>
+          </span>
+          <span className="tree-fact-value">
+            <BananaAmount value={marketCap} variant="bunch" />
+          </span>
+        </div>
+        <div className="tree-fact">
+          <span className="tree-fact-label">Branches en circulation</span>
+          <span className="tree-fact-value">
+            <BranchesIcon /> {tree.totalShares}
+          </span>
+        </div>
+        <div className="tree-fact">
+          <span className="tree-fact-label">Risque</span>
+          <span className="tree-fact-value">
+            <RiskMeter level={info.risk} /> {info.riskLabel}
+          </span>
+        </div>
+        <div className="tree-fact">
+          <span className="tree-fact-label">Liquidité</span>
+          <span className="tree-fact-value">
+            <LiquidityMeter level={info.liquidity} /> {info.liquidityLabel}
+          </span>
+        </div>
       </div>
 
       {holding && (
