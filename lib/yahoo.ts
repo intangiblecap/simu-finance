@@ -3,6 +3,9 @@
 // Un User-Agent de navigateur complet déclenche des 429 chez Yahoo ; celui-ci passe.
 const UA = "Mozilla/5.0";
 
+// Durée de mise en cache des réponses Yahoo (secondes).
+export const CACHE_TTL = { quotes: 300, intraday: 120, search: 3600 };
+
 // Hôtes Yahoo. YAHOO_RELAY (optionnel, dev uniquement) permet de passer par un relais local
 // quand le runtime n'a pas d'accès direct à Internet.
 let Q1 = "https://query1.finance.yahoo.com";
@@ -129,7 +132,7 @@ export async function getChart(symbol: string, range: Range = "1y"): Promise<Cha
   const url =
     `${Q1}/v8/finance/chart/${encodeURIComponent(symbol)}` +
     `?range=${range}&interval=${iv}&includePrePost=false&events=div%2Csplit`;
-  const json = await cachedJson(url, 300);
+  const json = await cachedJson(url, CACHE_TTL.quotes);
   const result = json?.chart?.result?.[0];
   if (!result) {
     const msg = json?.chart?.error?.description;
@@ -188,7 +191,7 @@ export async function getSeries(symbol: string, period: Period): Promise<{ point
   const url =
     `${Q1}/v8/finance/chart/${encodeURIComponent(symbol)}` +
     `?range=${range}&interval=${interval}&includePrePost=false`;
-  const json = await cachedJson(url, period === "1m" ? 300 : 120);
+  const json = await cachedJson(url, period === "1m" ? CACHE_TTL.quotes : CACHE_TTL.intraday);
   const result = json?.chart?.result?.[0];
   if (!result) throw new MarketDataError("Instrument introuvable", 404);
   const meta = result.meta ?? {};
@@ -246,7 +249,7 @@ export async function search(q: string): Promise<SearchResult[]> {
   const url =
     `${Q2}/v1/finance/search?q=${encodeURIComponent(q)}` +
     `&quotesCount=25&newsCount=0&listsCount=0&enableFuzzyQuery=false&lang=fr-FR&region=FR`;
-  const json = await cachedJson(url, 3600);
+  const json = await cachedJson(url, CACHE_TTL.search);
   const quotes: any[] = json?.quotes ?? [];
   const order = Object.keys(EUROPEAN_EXCHANGES);
   const results: SearchResult[] = quotes

@@ -1,4 +1,5 @@
 // Simu Finance — interface (vanilla JS, sans build).
+import { SECTIONS, methodHtml, ratePct } from "./method.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const view = $("#view");
@@ -90,7 +91,21 @@ const state = {
   dashMetric: "value",
   stockRange: "1y",
   protected: true,
+  config: null,
 };
+
+// Paramètres de simulation (taux de frais…), servis par /api/config.
+let configPromise = null;
+function getConfig() {
+  configPromise ??= api("/api/config").catch((e) => {
+    configPromise = null;
+    throw e;
+  });
+  return configPromise;
+}
+const feeLabel = () => (state.config ? ratePct(state.config.feeRate) : "");
+const feeLink = () =>
+  `<a href="#/methode/frais" class="muted">Frais de courtage${state.config ? ` (${feeLabel()})` : ""} ⓘ</a>`;
 
 async function loadPortfolio(force = false) {
   if (state.loading) return state.loading;
@@ -224,9 +239,10 @@ async function route() {
   closeSheet();
   const hash = location.hash.replace(/^#/, "") || "/";
   const [, page, arg] = hash.split("/");
-  window.scrollTo(0, 0);
+  if (page !== "methode") window.scrollTo(0, 0);
   try {
     if (page === "search") await renderSearch(token);
+    else if (page === "methode") await renderMethod(arg, token);
     else if (page === "stock" && arg) await renderStock(decodeURIComponent(arg), token);
     else await renderDashboard(token);
   } catch (e) {
@@ -465,6 +481,25 @@ async function renderSearch(token) {
   setTimeout(() => input.focus(), 50);
 }
 
+// ---------- Méthode ----------
+
+async function renderMethod(section, token) {
+  setHeader("Méthode de calcul");
+  setTab("methode");
+  if (!view.querySelector(".doc")) {
+    view.innerHTML = skeleton();
+    const cfg = await getConfig();
+    if (stale(token)) return;
+    view.innerHTML = methodHtml(cfg);
+  }
+  view.querySelectorAll(".toc a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#/methode/${section}`));
+  const target = section && SECTIONS.some(([id]) => id === section) ? document.getElementById(section) : null;
+  if (target) {
+    const top = target.getBoundingClientRect().top + window.scrollY - $(".topbar").offsetHeight - 8;
+    window.scrollTo({ top, behavior: "smooth" });
+  } else window.scrollTo(0, 0);
+}
+
 // ---------- Fiche action ----------
 
 async function renderStock(symbol, token) {
@@ -509,8 +544,9 @@ async function renderStock(symbol, token) {
         <button class="btn" type="submit" id="buy-btn" disabled>Simuler l'achat</button>
       </form>
       <p class="muted small" style="margin:10px 2px 0">Les fractions d'actions sont autorisées : tu peux investir 15 €.
-      Frais de courtage simulés : 0,5 % de chaque ordre (achat et vente), déjà inclus dans le montant.
-      Date passée : cours de clôture de ce jour (ou du jour de bourse suivant). Aujourd'hui : dernier cours connu.</p>
+      Frais de courtage simulés : ${feeLabel() || "un pourcentage"} de chaque ordre (achat et vente), déjà inclus dans le montant.
+      Date passée : cours de clôture de ce jour (ou du jour de bourse suivant). Aujourd'hui : dernier cours connu.
+      <a href="#/methode/prix">Comment c'est calculé ?</a></p>
     </section>`;
 
   drawPrice(q);
@@ -637,7 +673,7 @@ function bindBuyForm(q) {
         ${e.currency !== "EUR" ? `<div class="line"><span class="muted">Taux de change</span><span>1 ${esc(e.currency)} = ${numFmt(4).format(e.fx)} €</span></div>` : ""}
         <div class="line"><span class="muted">Quantité</span><span>${qty(e.quantity)} action${e.quantity >= 2 ? "s" : ""}</span></div>
         <div class="line"><span class="muted">Montant investi en actions</span><span>${eur(e.invested)}</span></div>
-        <div class="line"><span class="muted">Frais de courtage (0,5 %)</span><span>${eur(e.fees)}</span></div>
+        <div class="line"><span>${feeLink()}</span><span>${eur(e.fees)}</span></div>
         <div class="line total"><span>Total débité</span><span>${eur(e.total)}</span></div>`;
       btn.disabled = false;
     } catch (ex) {
@@ -722,7 +758,7 @@ function openSellSheet(lot) {
       est.innerHTML = `
         <div class="line"><span class="muted">Cours retenu (${date(e.date)})</span><span>${native(e.price, lot.currency)}</span></div>
         <div class="line"><span class="muted">Montant de la vente</span><span>${eur(e.gross)}</span></div>
-        <div class="line"><span class="muted">Frais de courtage (0,5 %)</span><span>−${eur(e.fees)}</span></div>
+        <div class="line"><span>${feeLink()}</span><span>−${eur(e.fees)}</span></div>
         <div class="line"><span class="muted">Tu récupères</span><span>${eur(e.proceeds)}</span></div>
         <div class="line total"><span>Plus-value</span><span class="${tone(e.pnl)}">${signedEur(e.pnl)}</span></div>`;
       btn.disabled = false;
@@ -772,6 +808,10 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el.hidden = true), 2800);
 }
+
+getConfig()
+  .then((c) => (state.config = c))
+  .catch(() => {});
 
 // Accès non protégé : avertissement et bouton de déconnexion masqué.
 api("/api/session")

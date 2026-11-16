@@ -20,6 +20,9 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
 - **Vente simulée** (clôture d'une position, avec annulation possible) et suppression.
 - **Devises** : les actions cotées hors euro (GBp, CHF, SEK, DKK…) sont converties en € avec le taux de change
   historique du jour d'achat / de vente et le taux actuel pour la valorisation.
+- **Onglet « Méthode »** : explique chaque choix (source des données, prix d'exécution, frais avec formules
+  et exemples, fractions, devises, calcul des gains, graphique, limites). Les paramètres affichés viennent de
+  `/api/config`, donc des mêmes constantes que les calculs (`lib/fees.ts`).
 - **Accès protégé** par mot de passe (cookie de session signé, valable 1 an), activé dès que le secret `APP_PASSWORD` est défini.
 - **Actualisation** des cours à l'ouverture de l'app et au retour dans l'app (et bouton ↻).
 
@@ -37,6 +40,7 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
 ```
 public/              Interface (HTML/CSS/JS sans build) + manifest PWA + icônes
   app.js             Application (tableau de bord, recherche, fiche action, achat/vente)
+  method.js          Onglet « Méthode » (explication des calculs)
   vendor/            Chart.js
 functions/           API (Cloudflare Pages Functions)
   _middleware.ts     Authentification sur tout le site
@@ -47,6 +51,7 @@ functions/           API (Cloudflare Pages Functions)
   api/portfolio.ts   GET   /api/portfolio            (calcul du portefeuille)
   api/timeline.ts    GET   /api/timeline?period=1d|1w|1m (évolution)
   api/session.ts     GET   /api/session              (accès protégé ou non)
+  api/config.ts      GET   /api/config               (paramètres de simulation)
   api/positions/     POST  /api/positions[?dryRun=1] (achat)
                      PATCH /api/positions/:id[?dryRun=1] (vente / annulation)
                      DELETE /api/positions/:id
