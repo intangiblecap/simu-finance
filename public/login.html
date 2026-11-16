@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Simu Finance">
+  <meta name="theme-color" content="#0d1117">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/style.css">
+  <title>Connexion · Simu Finance</title>
+</head>
+<body>
+  <div class="login-wrap">
+    <form class="card login-card" id="login">
+      <img class="logo" src="/icons/icon-192.png" alt="">
+      <h1>Simu Finance</h1>
+      <p>Accès privé</p>
+      <label class="field">
+        <span>Mot de passe</span>
+        <input class="input" type="password" name="password" autocomplete="current-password" required autofocus>
+      </label>
+      <div class="error" id="err" hidden></div>
+      <button class="btn" type="submit">Se connecter</button>
+    </form>
+  </div>
+  <script src="/login.js"></script>
+</body>
+</html>

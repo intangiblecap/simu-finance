@@ -1,0 +1,10 @@
+name = "simu-finance"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "public"
+
+# Base de données des investissements simulés (D1).
+[[d1_databases]]
+binding = "DB"
+database_name = "simu-finance"
+database_id = "0eda8d3d-c870-44de-904d-67d35c51d649"
+migrations_dir = "migrations"
