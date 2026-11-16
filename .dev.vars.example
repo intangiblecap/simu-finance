@@ -1,3 +1,4 @@
-# Copie ce fichier en .dev.vars pour le développement local.
+# Copie ce fichier en .dev.vars pour le développement local. Sans APP_PASSWORD, accès libre.
 APP_PASSWORD=change-moi
-SESSION_SECRET=une-longue-chaine-aleatoire
+# Optionnel (sinon dérivé du mot de passe)
+# SESSION_SECRET=une-longue-chaine-aleatoire

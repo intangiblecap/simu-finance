@@ -1,9 +1,17 @@
 import { isValidSession } from "../lib/auth";
-import type { Env } from "../lib/env";
+import { Env, authEnabled, sessionSecret } from "../lib/env";
 import { configureYahoo } from "../lib/yahoo";
 
 // Chemins accessibles sans être connecté.
-const PUBLIC = [/^\/login(\.html)?$/, /^\/api\/login$/, /^\/style\.css$/, /^\/login\.js$/, /^\/manifest\.webmanifest$/, /^\/icons\//];
+const PUBLIC = [
+  /^\/login(\.html)?$/,
+  /^\/api\/login$/,
+  /^\/api\/session$/,
+  /^\/style\.css$/,
+  /^\/login\.js$/,
+  /^\/manifest\.webmanifest$/,
+  /^\/icons\//,
+];
 
 export const onRequest: PagesFunction<Env> = async (ctx) => {
   const { request, env } = ctx;
@@ -11,12 +19,13 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   configureYahoo(env.YAHOO_RELAY);
   const isApi = url.pathname.startsWith("/api/");
 
-  if (!env.APP_PASSWORD || !env.SESSION_SECRET) {
-    const msg = "Configuration manquante : définis les secrets APP_PASSWORD et SESSION_SECRET.";
-    return isApi ? Response.json({ error: msg }, { status: 500 }) : new Response(msg, { status: 500 });
+  // Sans APP_PASSWORD : accès libre (l'interface affiche un avertissement).
+  if (!authEnabled(env)) {
+    if (/^\/login(\.html)?$/.test(url.pathname)) return Response.redirect(new URL("/", url).toString(), 302);
+    return ctx.next();
   }
 
-  if (PUBLIC.some((re) => re.test(url.pathname)) || (await isValidSession(request, env.SESSION_SECRET))) {
+  if (PUBLIC.some((re) => re.test(url.pathname)) || (await isValidSession(request, sessionSecret(env)))) {
     return ctx.next();
   }
 
