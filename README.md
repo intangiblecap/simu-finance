@@ -55,7 +55,7 @@ plus tard ETF, crypto, obligations, etc.
 ## Déploiement sur Cloudflare
 
 1. **Base D1** : dans le tableau de bord Cloudflare → *Storage & Databases* → *D1* → *Create database*,
-   nom `simu-finance`. Copie son **Database ID** et remplace `REMPLACER_PAR_ID_D1` dans `wrangler.toml`.
+   nom `simu-finance`. Son ID est renseigné dans `wrangler.toml`.
 2. **Tables** : dans la console de la base D1 (*Console*), colle et exécute le contenu de
    `migrations/0001_init.sql`.
    (Ou en ligne de commande : `npx wrangler d1 migrations apply simu-finance --remote`.)
