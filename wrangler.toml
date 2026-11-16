@@ -1,0 +1,11 @@
+name = "simu-finance"
+compatibility_date = "2024-11-01"
+pages_build_output_dir = "public"
+
+# Base de données des investissements simulés.
+# Après `npx wrangler d1 create simu-finance`, remplace database_id par l'ID affiché.
+[[d1_databases]]
+binding = "DB"
+database_name = "simu-finance"
+database_id = "REMPLACER_PAR_ID_D1"
+migrations_dir = "migrations"
