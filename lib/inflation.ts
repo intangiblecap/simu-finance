@@ -18,7 +18,10 @@ const dayMs = 86_400_000;
 const iso = (t: number) => new Date(t).toISOString().slice(0, 10);
 
 export async function getInflation(fromDate: string, toDate: string): Promise<InflationSeries> {
-  const since = new Date(Date.parse(fromDate) - 62 * dayMs).toISOString().slice(0, 7);
+  // Au moins 15 mois d'historique : il en faut 12 publiés pour prolonger la série, même
+  // quand le premier achat est récent (la publication a environ 1 mois et demi de retard).
+  const sinceT = Math.min(Date.parse(fromDate) - 62 * dayMs, Date.parse(toDate) - 460 * dayMs);
+  const since = new Date(sinceT).toISOString().slice(0, 7);
   const json = await cachedJson(`${eurostatBase()}${EUROSTAT_PATH}&sinceTimePeriod=${since}`, INFLATION_CACHE_SECONDS);
   const idx: Record<string, number> = json?.dimension?.time?.category?.index ?? {};
   const byPos = new Map(Object.entries(idx).map(([m, i]) => [i, m]));
