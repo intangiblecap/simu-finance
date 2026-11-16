@@ -11,6 +11,12 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
 - **Tableau de bord** : valeur du portefeuille, plus-value totale / latente / réalisée, variation du jour,
   graphique d'évolution (valeur vs montant investi, ou gain cumulé) sur 1 jour (pas de 5 min),
   1 semaine (pas de 30 min) ou 1 mois (journalier), répartition par action, positions ouvertes et vendues.
+- **Comparer à un indice** (tableau de bord) : ce qu'aurait rapporté le même argent, aux mêmes dates, placé dans
+  le STOXX Europe 600, le CAC 40, l'Euro Stoxx 50, le S&P 500 (converti en €), le MSCI World ou en bons du Trésor US
+  (taux sans risque). Méthode du « portefeuille fantôme » (`lib/benchmark.ts`).
+- **Fiche action** claire : en-tête (cours, variation du jour), graphique avec performance et plus haut / plus bas
+  de la période, « Ma position » (synthèse + détail des achats et ventes), bouton « Simuler un achat » toujours
+  visible qui ouvre un parcours guidé (Combien ? → Quand ? → récapitulatif).
 - **Découvrir** : tendances du jour (5 plus fortes hausses / baisses parmi ~64 grandes capitalisations
   européennes, avec mini-graphique de la séance) et 20 actions à connaître, chacune avec une phrase d'explication
   (liste dans `lib/universe.ts`).
@@ -56,6 +62,7 @@ functions/           API (Cloudflare Pages Functions)
   api/session.ts     GET   /api/session              (accès protégé ou non)
   api/config.ts      GET   /api/config               (paramètres de simulation)
   api/discover.ts    GET   /api/discover             (tendances + actions à connaître)
+  api/benchmark.ts   GET   /api/benchmark?id=        (comparaison avec un indice)
   api/positions/     POST  /api/positions[?dryRun=1] (achat)
                      PATCH /api/positions/:id[?dryRun=1] (vente / annulation)
                      DELETE /api/positions/:id
