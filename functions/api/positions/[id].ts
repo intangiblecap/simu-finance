@@ -2,10 +2,14 @@ import type { Env } from "../../../lib/env";
 import { HttpError, errorResponse, isIsoDate, json, readJson, todayParis } from "../../../lib/http";
 import { PositionRow, executionAt, loadMarket } from "../../../lib/portfolio";
 import { orderFees } from "../../../lib/fees";
+import { currentPortfolio } from "../../../lib/scope";
 import { round } from "../../../lib/yahoo";
 
-async function getRow(env: Env, id: string): Promise<PositionRow> {
-  const row = await env.DB.prepare("SELECT * FROM positions WHERE id = ?").bind(Number(id)).first<PositionRow>();
+async function getRow(env: Env, id: string, request: Request): Promise<PositionRow> {
+  const pf = await currentPortfolio(env, request);
+  const row = await env.DB.prepare("SELECT * FROM positions WHERE id = ? AND portfolio_id = ?")
+    .bind(Number(id), pf.id)
+    .first<PositionRow>();
   if (!row) throw new HttpError(404, "Position introuvable");
   return row;
 }
@@ -18,7 +22,7 @@ interface PatchRequest {
 // Vente simulée (clôture du lot) ou annulation de la vente. ?dryRun=1 pour une estimation.
 export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params }) => {
   try {
-    const row = await getRow(env, String(params.id));
+    const row = await getRow(env, String(params.id), request);
     const body = await readJson<PatchRequest>(request);
 
     if (body.action === "reopen") {
@@ -62,9 +66,9 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
   }
 };
 
-export const onRequestDelete: PagesFunction<Env> = async ({ env, params }) => {
+export const onRequestDelete: PagesFunction<Env> = async ({ env, params, request }) => {
   try {
-    const row = await getRow(env, String(params.id));
+    const row = await getRow(env, String(params.id), request);
     await env.DB.prepare("DELETE FROM positions WHERE id = ?").bind(row.id).run();
     return json({ ok: true });
   } catch (e) {

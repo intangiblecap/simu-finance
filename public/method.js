@@ -43,6 +43,7 @@ export function methodHtml(cfg) {
     <h2>En bref</h2>
     <p>Simu Finance répond à une question : <b>« combien aurais-je gagné ou perdu si j'avais vraiment acheté cette action ? »</b>
     Aucun argent réel n'est engagé. Chaque achat simulé est enregistré avec son prix, sa date et ses frais, puis revalorisé avec les cours du marché à chaque ouverture de l'app.</p>
+    <p>Tu peux avoir <b>plusieurs portefeuilles</b> (menu en haut à gauche), chacun avec sa <b>date de démarrage</b> : aucun achat ne peut avoir lieu avant. Un portefeuille démarré dans le passé permet de tester « et si j'avais commencé en 2015 ? » avec l'écran <a href="#/methode/wayback">Remonter le temps</a>. Les comparaisons et le gain total sont toujours calculés pour le portefeuille sélectionné.</p>
     <p>L'objectif est d'être <b>simple et proche de la réalité</b> : on applique les mêmes règles qu'un courtier en ligne (prix de marché, frais, conversion de devises), sans entrer dans tous les détails fiscaux ou techniques (voir <a href="#/methode/limites">ce qui n'est pas simulé</a>).</p>
   </section>
 
@@ -138,10 +139,15 @@ export function methodHtml(cfg) {
     <div class="formula">plus-value latente = valeur actuelle − coût</div>
     <div class="formula">plus-value réalisée = (montant de la vente − frais de vente) − coût</div>
     <div class="formula">performance (%) = plus-value ÷ coût</div>
+    <h3>Gain total, sur toute la vie du portefeuille</h3>
+    <p>Le chiffre principal du tableau de bord prend en compte <b>tous les achats et toutes les ventes</b> depuis la date de démarrage du portefeuille, y compris les positions déjà vendues :</p>
+    <div class="formula">gain total = valeur actuelle des positions + montants récupérés par les ventes − total investi</div>
+    <div class="formula">performance (%) = gain total ÷ total investi</div>
+    <p>Le <b>total investi</b> est la somme de tous les achats, frais compris ; les montants récupérés sont nets des frais de vente. Les frais payés sont donc déjà déduits du gain.</p>
     <ul>
       <li><b>Latente</b> : gain sur les positions que tu détiens encore (il peut encore changer).</li>
       <li><b>Réalisée</b> : gain définitivement acquis sur les positions vendues.</li>
-      <li><b>Depuis le début</b> : latente + réalisée, rapportée au coût total de tous tes achats.</li>
+      <li><b>Gain total</b> = latente + réalisée (c'est le même chiffre que la formule ci-dessus).</li>
       <li><b>Aujourd'hui</b> : quantité × (dernier cours − clôture de la veille). Pour un achat fait aujourd'hui, on part du prix d'achat.</li>
     </ul>
   </section>

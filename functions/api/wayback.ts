@@ -2,6 +2,7 @@ import type { Env } from "../../lib/env";
 import { MIN_ORDER_EUR, floorQty, netFromBudget } from "../../lib/fees";
 import { HttpError, errorResponse, isIsoDate, json, readJson, todayParis } from "../../lib/http";
 import { PositionRow, executionAt, loadMarket, positionCost } from "../../lib/portfolio";
+import { PortfolioRow, currentPortfolio, portfolioRows } from "../../lib/scope";
 import { EUROPEAN_EXCHANGES, exchangeSuffix, isEuropean, round, shortName } from "../../lib/yahoo";
 
 // « Remonter le temps » : voir et modifier les montants investis à une date donnée.
@@ -34,21 +35,18 @@ async function lineFor(symbol: string, date: string, rows: PositionRow[]) {
   };
 }
 
-async function allRows(env: Env) {
-  const { results } = await env.DB.prepare("SELECT * FROM positions ORDER BY buy_date, id").all<PositionRow>();
-  return results;
-}
-
-function checkDate(date: unknown): string {
+function checkDate(date: unknown, pf: PortfolioRow): string {
   if (!isIsoDate(date)) throw new HttpError(400, "Date invalide");
   if (date > todayParis()) throw new HttpError(400, "La date ne peut pas être dans le futur");
+  if (date < pf.start_date) throw new HttpError(400, `Le portefeuille « ${pf.name} » démarre le ${pf.start_date}`);
   return date;
 }
 
 export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
-    const date = checkDate(new URL(request.url).searchParams.get("date"));
-    const rows = await allRows(env);
+    const pf = await currentPortfolio(env, request);
+    const date = checkDate(new URL(request.url).searchParams.get("date"), pf);
+    const rows = await portfolioRows(env, pf.id);
     const symbols = [...new Set(rows.map((r) => r.symbol))];
     const lines = await Promise.all(
       symbols.map((s) =>
@@ -73,10 +71,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const dryRun = new URL(request.url).searchParams.get("dryRun") === "1";
     const body = await readJson<{ date?: string; items?: Item[] }>(request);
-    const date = checkDate(body.date);
+    const pf = await currentPortfolio(env, request);
+    const date = checkDate(body.date, pf);
     const items = Array.isArray(body.items) ? body.items.slice(0, 50) : [];
     if (!items.length) throw new HttpError(400, "Aucune modification");
-    const rows = await allRows(env);
+    const rows = await portfolioRows(env, pf.id);
 
     const plans = await Promise.all(
       items.map(async (it) => {
@@ -135,9 +134,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       if (p.quantity > 0) {
         stmts.push(
           env.DB.prepare(
-            `INSERT INTO positions (instrument_type, symbol, name, exchange, currency, quantity, buy_date, buy_price, buy_fx, buy_fees)
-             VALUES ('stock', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO positions (portfolio_id, instrument_type, symbol, name, exchange, currency, quantity, buy_date, buy_price, buy_fx, buy_fees)
+             VALUES (?, 'stock', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           ).bind(
+            pf.id,
             p.chart.symbol,
             p.chart.name,
             EUROPEAN_EXCHANGES[exchangeSuffix(p.chart.symbol)!] ?? p.chart.exchange,

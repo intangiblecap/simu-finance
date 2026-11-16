@@ -11,6 +11,10 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
 - **Tableau de bord** : valeur du portefeuille, plus-value totale / latente / réalisée, variation du jour,
   graphique d'évolution (valeur vs montant investi, ou gain cumulé) sur 1 jour (pas de 5 min),
   1 semaine (pas de 30 min) ou 1 mois (journalier), répartition par action, positions ouvertes et vendues.
+- **Plusieurs portefeuilles** (menu en haut à gauche), chacun avec une **date de démarrage** : aucun achat avant
+  cette date ; un portefeuille démarré dans le passé s'ouvre sur « Remonter le temps » à cette date.
+- **Gain total sur toute la vie du portefeuille** : valeur actuelle + montants récupérés par les ventes − total
+  investi (tous les achats, frais compris).
 - **Onglet « Comparer »** : ce qu'aurait rapporté le même argent, aux mêmes dates, dans chaque référence :
   STOXX Europe 600, CAC 40, Euro Stoxx 50, S&P 500 (converti en €), MSCI World, bons du Trésor US (taux sans risque)
   et **inflation France** (IPCH Eurostat), avec le **gain réel** après inflation. Méthode du « portefeuille fantôme »
@@ -65,6 +69,7 @@ functions/           API (Cloudflare Pages Functions)
   api/session.ts     GET   /api/session              (accès protégé ou non)
   api/config.ts      GET   /api/config               (paramètres de simulation)
   api/discover.ts    GET   /api/discover             (tendances + actions à connaître)
+  api/portfolios/    GET/POST /api/portfolios, PATCH/DELETE /api/portfolios/:id
   api/benchmark.ts   GET   /api/benchmark?ids=       (comparaison avec les références)
   api/wayback.ts     GET   /api/wayback?date=        (remonter le temps : état à une date)
                      POST  /api/wayback[?dryRun=1]   (fixer les montants investis à une date)
@@ -74,6 +79,10 @@ functions/           API (Cloudflare Pages Functions)
 lib/                 Yahoo Finance, calculs de portefeuille, auth
 migrations/          Schéma D1
 ```
+
+Le portefeuille courant est transmis par l'interface dans l'en-tête `X-Portfolio-Id`.
+Le schéma de la base est mis à jour **automatiquement** au premier appel de l'API (`lib/schema.ts`) :
+aucune requête SQL à exécuter à la main lors des évolutions (les fichiers de `migrations/` servent de référence).
 
 La table `positions` a une colonne `instrument_type` (`stock` pour l'instant) pour accueillir
 plus tard ETF, crypto, obligations, etc.

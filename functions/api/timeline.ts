@@ -1,6 +1,7 @@
 import type { Env } from "../../lib/env";
 import { errorResponse, json } from "../../lib/http";
-import { PositionRow, computeTimeline } from "../../lib/portfolio";
+import { computeTimeline } from "../../lib/portfolio";
+import { currentPortfolio, portfolioRows } from "../../lib/scope";
 import type { Period } from "../../lib/yahoo";
 
 const PERIODS: Period[] = ["1d", "1w", "1m"];
@@ -10,8 +11,8 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   try {
     const p = new URL(request.url).searchParams.get("period") as Period | null;
     const period: Period = p && PERIODS.includes(p) ? p : "1m";
-    const { results } = await env.DB.prepare("SELECT * FROM positions ORDER BY buy_date, id").all<PositionRow>();
-    return json(await computeTimeline(results, period));
+    const pf = await currentPortfolio(env, request);
+    return json(await computeTimeline(await portfolioRows(env, pf.id), period));
   } catch (e) {
     return errorResponse(e);
   }
