@@ -1,6 +1,7 @@
 import type { Env } from "../../../lib/env";
 import { HttpError, errorResponse, isIsoDate, json, readJson, todayParis } from "../../../lib/http";
 import { PositionRow, executionAt, loadMarket } from "../../../lib/portfolio";
+import { orderFees } from "../../../lib/fees";
 import { round } from "../../../lib/yahoo";
 
 async function getRow(env: Env, id: string): Promise<PositionRow> {
@@ -12,7 +13,6 @@ async function getRow(env: Env, id: string): Promise<PositionRow> {
 interface PatchRequest {
   action?: "sell" | "reopen";
   date?: string;
-  fees?: number;
 }
 
 // Vente simulée (clôture du lot) ou annulation de la vente. ?dryRun=1 pour une estimation.
@@ -35,17 +35,18 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
     const date = body.date ?? todayParis();
     if (!isIsoDate(date)) throw new HttpError(400, "Date invalide");
     if (date < row.buy_date) throw new HttpError(400, "La vente ne peut pas précéder l'achat");
-    const fees = Number(body.fees ?? 0);
-    if (!Number.isFinite(fees) || fees < 0) throw new HttpError(400, "Frais invalides");
 
     const { chart, fx } = await loadMarket(row.symbol, row.currency, date);
     const exec = executionAt(chart, fx, date);
-    const proceeds = row.quantity * exec.price * exec.fx - fees;
+    const gross = row.quantity * exec.price * exec.fx;
+    const fees = orderFees(gross);
+    const proceeds = gross - fees;
     const cost = row.quantity * row.buy_price * row.buy_fx + row.buy_fees;
     const estimate = {
       date: exec.date,
       price: exec.price,
       fx: exec.fx,
+      gross: round(gross),
       fees,
       proceeds: round(proceeds),
       pnl: round(proceeds - cost),
