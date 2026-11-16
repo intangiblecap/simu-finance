@@ -81,6 +81,7 @@ const state = {
   dashRange: "all",
   dashMetric: "value",
   stockRange: "1y",
+  protected: true,
 };
 
 async function loadPortfolio(force = false) {
@@ -283,6 +284,7 @@ async function renderDashboard(token) {
   const closed = p.positions.filter((x) => x.status === "closed");
 
   view.innerHTML = `
+    ${state.protected ? "" : `<div class="banner">Accès non protégé : n'importe qui avec l'URL peut voir et modifier ce portefeuille. Ajoute le secret <b>APP_PASSWORD</b> dans Cloudflare pour activer le mot de passe.</div>`}
     ${p.errors.length ? `<div class="banner">Données indisponibles pour : ${p.errors.map((e) => esc(e.symbol)).join(", ")}. Les valeurs affichées peuvent être incomplètes.</div>` : ""}
     <section class="card hero">
       <div class="label">Valeur du portefeuille</div>
@@ -746,5 +748,14 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el.hidden = true), 2800);
 }
+
+// Accès non protégé : avertissement et bouton de déconnexion masqué.
+api("/api/session")
+  .then((s) => {
+    state.protected = s.protected;
+    $("#logout").hidden = !s.protected;
+    if (!s.protected) route();
+  })
+  .catch(() => {});
 
 route();

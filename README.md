@@ -19,7 +19,7 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
 - **Vente simulée** (clôture d'une position, avec annulation possible) et suppression.
 - **Devises** : les actions cotées hors euro (GBp, CHF, SEK, DKK…) sont converties en € avec le taux de change
   historique du jour d'achat / de vente et le taux actuel pour la valorisation.
-- **Accès protégé** par mot de passe (cookie de session signé, valable 1 an).
+- **Accès protégé** par mot de passe (cookie de session signé, valable 1 an), activé dès que le secret `APP_PASSWORD` est défini.
 - **Actualisation** des cours à l'ouverture de l'app et au retour dans l'app (et bouton ↻).
 
 ### Règles de calcul
@@ -63,11 +63,10 @@ plus tard ETF, crypto, obligations, etc.
    - Framework preset : *None*
    - Build command : *(vide)*
    - Build output directory : `public`
-4. **Secrets** : dans le projet Pages → *Settings* → *Variables and Secrets*, ajoute (type *Secret*) :
-   - `APP_PASSWORD` : ton mot de passe d'accès
-   - `SESSION_SECRET` : une longue chaîne aléatoire (ex : générée par un gestionnaire de mots de passe)
-
-   Puis relance un déploiement (*Deployments* → *Retry deployment*).
+4. **Mot de passe** (recommandé) : dans le projet Pages → *Settings* → *Variables and Secrets*, ajoute
+   le secret `APP_PASSWORD`, puis relance un déploiement (*Deployments* → *Retry deployment*).
+   Sans ce secret, l'app est accessible sans connexion et affiche un avertissement.
+   `SESSION_SECRET` (optionnel) permet de déconnecter toutes les sessions en le changeant.
 5. Ouvre l'URL `https://<projet>.pages.dev`.
 
 Le binding D1 (`DB`) est lu depuis `wrangler.toml`. Chaque push sur la branche de production redéploie le site.
