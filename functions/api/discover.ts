@@ -1,15 +1,7 @@
 import type { Env } from "../../lib/env";
 import { errorResponse, json } from "../../lib/http";
 import { FEATURED, TREND_TOP_N, TREND_UNIVERSE } from "../../lib/universe";
-import { EUROPEAN_EXCHANGES, exchangeSuffix, getSpark } from "../../lib/yahoo";
-
-// Nom court pour les listes : sans forme juridique (S.A., AG, plc…).
-function shortName(name: string): string {
-  return name
-    .replace(/,?\s+(S\.?A\.?|SE|AG|plc|PLC|N\.?V\.?|A\/S|S\.p\.A\.?|SpA|Société Anonyme|Group|Holding)\.?$/i, "")
-    .replace(/,?\s+(S\.?A\.?|SE|AG|plc|N\.?V\.?)\.?$/i, "")
-    .trim();
-}
+import { EUROPEAN_EXCHANGES, exchangeSuffix, getSpark, shortName } from "../../lib/yahoo";
 
 // Onglet « Découvrir » : tendances du jour (plus fortes hausses / baisses parmi
 // les grandes capitalisations européennes) et 20 actions à connaître.

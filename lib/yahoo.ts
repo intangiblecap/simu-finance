@@ -10,12 +10,17 @@ export const CACHE_TTL = { quotes: 300, intraday: 120, search: 3600 };
 // quand le runtime n'a pas d'accès direct à Internet.
 let Q1 = "https://query1.finance.yahoo.com";
 let Q2 = "https://query2.finance.yahoo.com";
+let EU = "https://ec.europa.eu";
 export function configureYahoo(relay?: string) {
   if (relay) {
-    Q1 = `${relay.replace(/\/$/, "")}/q1`;
-    Q2 = `${relay.replace(/\/$/, "")}/q2`;
+    const base = relay.replace(/\/$/, "");
+    Q1 = `${base}/q1`;
+    Q2 = `${base}/q2`;
+    EU = `${base}/eu`;
   }
 }
+// Hôte Eurostat (même mécanisme de relais en développement).
+export const eurostatBase = () => EU;
 
 export interface PricePoint {
   date: string; // YYYY-MM-DD (heure locale de la place de cotation)
@@ -80,7 +85,7 @@ export class MarketDataError extends Error {
   }
 }
 
-async function cachedJson(url: string, ttlSeconds: number): Promise<any> {
+export async function cachedJson(url: string, ttlSeconds: number): Promise<any> {
   const cache = (globalThis as any).caches?.default as Cache | undefined;
   const key = new Request(url);
   if (cache) {
@@ -370,6 +375,15 @@ export function valueAt(points: PricePoint[], date: string): number | null {
 export function fxAt(fx: FxSeries, date: string): number {
   if (!fx.points.length) return fx.current;
   return valueAt(fx.points, date) ?? fx.current;
+}
+
+// Nom court pour les listes : sans forme juridique (S.A., AG, plc…).
+export function shortName(name: string): string {
+  return name
+    .replace(/\s+-\s+.*$/, "") // « LVMH Moët Hennessy - Louis Vuitton, … » → « LVMH Moët Hennessy »
+    .replace(/,?\s+(S\.?A\.?|SE|AG|plc|PLC|N\.?V\.?|A\/S|S\.p\.A\.?|SpA|Société Anonyme|Group|Holding)\.?$/i, "")
+    .replace(/,?\s+(S\.?A\.?|SE|AG|plc|N\.?V\.?)\.?$/i, "")
+    .trim();
 }
 
 export function round(n: number, d = 2): number {

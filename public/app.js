@@ -248,6 +248,8 @@ async function route() {
   try {
     if (page === "search") await renderSearch(token);
     else if (page === "methode") await renderMethod(arg, token);
+    else if (page === "compare") await renderCompare(token);
+    else if (page === "wayback") await renderWayback(token);
     else if (page === "stock" && arg) await renderStock(decodeURIComponent(arg), token);
     else await renderDashboard(token);
   } catch (e) {
@@ -300,7 +302,8 @@ async function renderDashboard(token) {
     view.innerHTML = `<div class="card empty">
       <h2>Aucun investissement simulé</h2>
       <p>Cherche une action européenne, choisis une date et un montant : l'app calcule ce que tu aurais gagné ou perdu.</p>
-      <a class="btn" href="#/search">Découvrir des actions</a></div>`;
+      <a class="btn" href="#/search">Découvrir des actions</a>
+      <a class="btn secondary" href="#/wayback" style="margin-top:8px">⟲ Remonter le temps</a></div>`;
     return;
   }
 
@@ -324,6 +327,11 @@ async function renderDashboard(token) {
       </div>
     </section>
 
+    <div class="shortcuts">
+      <a class="shortcut" href="#/wayback"><span class="ico">⟲</span><span><b>Remonter le temps</b><br><span class="muted small">Modifier mes achats à une date</span></span></a>
+      <a class="shortcut" href="#/compare"><span class="ico">⚖</span><span><b>Comparer</b><br><span class="muted small">Indices, inflation</span></span></a>
+    </div>
+
     <section class="card">
       <div class="card-head">
         <h2>Évolution</h2>
@@ -331,11 +339,6 @@ async function renderDashboard(token) {
       </div>
       <div class="chart-box"><canvas id="evo"></canvas><div class="chart-msg muted small" id="evo-msg" hidden></div></div>
       <div style="margin-top:10px">${seg("period", [["1d", "1 jour"], ["1w", "1 semaine"], ["1m", "1 mois"]], state.dashPeriod)}</div>
-    </section>
-
-    <section class="card" id="bench">
-      <div class="card-head"><h2>Comparer à un indice</h2></div>
-      <div id="bench-body"><div class="skeleton" style="height:120px"></div></div>
     </section>
 
     ${open.length ? `<section class="card">
@@ -361,7 +364,6 @@ async function renderDashboard(token) {
   `;
 
   drawEvolution(token);
-  renderBenchmark(token);
   if (open.length) doughnut($("#alloc"), p.allocation.map((a) => a.name), p.allocation.map((a) => a.value));
 
   view.querySelectorAll("[data-seg]").forEach((el) =>
@@ -424,80 +426,311 @@ async function drawEvolution(token) {
   evoChart = lineChart($("#evo"), labels, datasets, { intraday: period !== "1m" });
 }
 
-// ---------- Comparaison avec un indice de référence ----------
+// ---------- Comparer : le portefeuille face aux références ----------
 
 let benchChart = null;
-async function renderBenchmark(token) {
-  const body = $("#bench-body");
-  let cfg;
-  try {
-    cfg = state.config ?? (state.config = await getConfig());
-  } catch (e) {
-    body.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+async function renderCompare(token) {
+  setHeader("Comparer");
+  setTab("compare");
+  view.innerHTML = skeleton();
+  if (!state.compare || state.compare.at < state.lastLoad || Date.now() - state.compare.at > 300_000) {
+    state.compare = { at: Date.now(), data: await api("/api/benchmark") };
+  }
+  if (stale(token)) return;
+  const d = state.compare.data;
+  if (!d.portfolio) {
+    view.innerHTML = `<div class="card empty"><h2>Rien à comparer pour l'instant</h2>
+      <p>Simule un premier achat : tu pourras ensuite comparer tes gains à ceux des grands indices et de l'inflation.</p>
+      <a class="btn" href="#/search">Découvrir des actions</a></div>`;
     return;
   }
-  if (stale(token) || !$("#bench-body")) return;
-  const id = cfg.benchmarks.some((b) => b.id === state.benchId) ? state.benchId : cfg.defaultBenchmark;
-  body.innerHTML = `
-    <select class="input bench-select" id="bench-select" aria-label="Indice de référence">
-      ${cfg.benchmarks.map((b) => `<option value="${b.id}" ${b.id === id ? "selected" : ""}>${esc(b.name)}</option>`).join("")}
-    </select>
-    <div id="bench-content"><div class="skeleton" style="height:120px;margin-top:12px"></div></div>`;
-  $("#bench-select").addEventListener("change", (e) => {
-    state.benchId = e.target.value;
+  const refs = d.references.filter((r) => r.summary);
+  const sel = refs.find((r) => r.id === state.benchId) ?? refs.find((r) => r.id === state.config?.defaultBenchmark) ?? refs[0];
+  const infl = refs.find((r) => r.kind === "inflation");
+  const real = infl ? d.portfolio.pnl - infl.summary.pnl : null;
+  const groups = [...new Set(refs.map((r) => r.group))];
+  // Écart = mon gain − gain de la référence (positif : je fais mieux).
+  const diffBadge = (x) => `<div class="muted small">écart</div><div class="${tone(x)}"><b>${signedEur(x)}</b></div>`;
+
+  view.innerHTML = `
+    <section class="card">
+      <p style="margin:0 0 12px">Et si tu avais placé <b>le même argent, aux mêmes dates</b>, ailleurs que dans tes actions ?
+        <span class="muted small">Depuis ton premier achat (${date(d.since)}), ${eur(d.totalCost)} investis au total.</span></p>
+      <div class="bench-stats">
+        <div class="stat"><div class="k">Mon portefeuille</div>
+          <div class="v ${tone(d.portfolio.pnl)}">${signedEur(d.portfolio.pnl)}</div><div class="small ${tone(d.portfolio.pct)}">${pct(d.portfolio.pct)}</div></div>
+        ${real != null ? `<div class="stat"><div class="k">Gain réel, après inflation</div>
+          <div class="v ${tone(real)}">${signedEur(real)}</div><div class="small muted">ce que tu gagnes en pouvoir d'achat</div></div>` : ""}
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Toutes les références</h2>
+      <p class="muted small" style="margin:-6px 0 4px">Gain qu'aurait rapporté chaque placement. L'<b>écart</b> est positif quand tu fais mieux. Touche une ligne pour l'afficher sur le graphique.</p>
+      ${groups
+        .map(
+          (g) => `<h3 class="sub-h">${esc(g)}</h3><ul class="list ref-list">${refs
+            .filter((r) => r.group === g)
+            .map(
+              (r) => `<li><button class="row ref ${r.id === sel.id ? "on" : ""}" data-id="${r.id}">
+                <div class="main"><div class="title">${esc(r.name)}</div>
+                  <div class="sub ${tone(r.summary.pnl)}">${signedEur(r.summary.pnl)} · ${pct(r.summary.pct)}</div></div>
+                <div class="right">${diffBadge(r.summary.difference)}</div></button></li>`,
+            )
+            .join("")}</ul>`,
+        )
+        .join("")}
+      ${d.references.filter((r) => r.error).map((r) => `<p class="error small">${esc(r.name)} indisponible : ${esc(r.error)}</p>`).join("")}
+    </section>
+
+    <section class="card" id="bench-detail"></section>
+    <p class="muted small" style="text-align:center"><a href="#/methode/indices">Comment est fait ce calcul ? Pourquoi pas le PIB ?</a></p>`;
+
+  const showDetail = (r) => {
+    state.benchId = r.id;
     try {
-      localStorage.setItem("benchId", state.benchId);
+      localStorage.setItem("benchId", r.id);
     } catch {}
-    renderBenchmark(token);
-  });
-
-  let d;
-  try {
-    d = await api(`/api/benchmark?id=${id}`);
-  } catch (e) {
-    if (!stale(token) && $("#bench-content")) $("#bench-content").innerHTML = `<div class="error">${esc(e.message)}</div>`;
-    return;
-  }
-  if (stale(token) || !$("#bench-content") || $("#bench-select").value !== id) return;
-  const s = d.summary;
-  if (!s) {
-    $("#bench-content").innerHTML = `<p class="muted small">Aucun achat simulé pour l'instant.</p>`;
-    return;
-  }
-  const name = esc(d.benchmark.name);
-  const diff = s.difference;
-  const verdict =
-    Math.abs(diff) < 0.5
-      ? `Tu fais <b>jeu égal</b> avec ${name}.`
-      : diff > 0
-        ? `Tu fais <b class="up">mieux</b> que ${name} : <b class="up">${signedEur(diff)}</b> de plus.`
-        : `${name} aurait rapporté <b class="down">${eur(-diff)} de plus</b> que tes choix d'actions.`;
-  $("#bench-content").innerHTML = `
-    <p class="muted small" style="margin:8px 0 12px">${esc(d.benchmark.description)}</p>
-    <div class="bench-stats">
-      <div class="stat"><div class="k">Mon portefeuille</div>
-        <div class="v ${tone(s.portfolioPnl)}">${signedEur(s.portfolioPnl)}</div><div class="small ${tone(s.portfolioPct)}">${pct(s.portfolioPct)}</div></div>
-      <div class="stat"><div class="k">Même argent dans ${name}</div>
-        <div class="v ${tone(s.benchmarkPnl)}">${signedEur(s.benchmarkPnl)}</div><div class="small ${tone(s.benchmarkPct)}">${pct(s.benchmarkPct)}</div></div>
-    </div>
-    <p class="verdict">${verdict}</p>
-    <div class="chart-box"><canvas id="bench-chart"></canvas></div>
-    <p class="muted small" style="margin:10px 0 0">Gains cumulés depuis ton premier achat (${date(s.since)}), aux mêmes dates et avec les mêmes montants.
-      <a href="#/methode/indices">Qu'est-ce qu'un indice ?</a></p>`;
-
-  if (benchChart) {
-    benchChart.destroy();
-    charts.delete(benchChart);
-  }
-  const pts = d.points;
-  benchChart = lineChart(
-    $("#bench-chart"),
-    pts.map((x) => x.t),
-    [
-      { label: "Mon portefeuille", data: pts.map((x) => x.portfolio), borderColor: cssVar("--accent") },
-      { label: d.benchmark.name, data: pts.map((x) => x.benchmark), borderColor: cssVar("--bench"), borderWidth: 1.8 },
-    ],
+    view.querySelectorAll(".ref").forEach((b) => b.classList.toggle("on", b.dataset.id === r.id));
+    const name = esc(r.short);
+    const diff = r.summary.difference;
+    let verdict;
+    if (r.kind === "inflation") {
+      verdict = diff >= 0
+        ? `Ton portefeuille <b class="up">bat l'inflation</b> : ton pouvoir d'achat a augmenté de <b class="up">${eur(diff)}</b>.`
+        : `Ton portefeuille <b class="down">ne suit pas l'inflation</b> : tu as perdu <b class="down">${eur(-diff)}</b> de pouvoir d'achat.`;
+    } else if (Math.abs(diff) < 0.5) verdict = `Tu fais <b>jeu égal</b> avec ${name}.`;
+    else if (diff > 0) verdict = `Tu fais <b class="up">mieux</b> que ${name} : <b class="up">${eur(diff)}</b> de plus.`;
+    else verdict = `${name} aurait rapporté <b class="down">${eur(-diff)} de plus</b> que tes choix d'actions.`;
+    const note =
+      r.kind === "inflation" && r.meta
+        ? `<p class="muted small" style="margin:8px 0 0">Indice des prix Eurostat publié jusqu'à ${esc(r.meta.lastPublished)}, prolongé ensuite au rythme récent (${numFmt(1).format(r.meta.extrapolatedAnnualRate)} % par an).</p>`
+        : "";
+    $("#bench-detail").innerHTML = `
+      <h2>${esc(r.name)}</h2>
+      <p class="muted small" style="margin:-6px 0 10px">${esc(r.description)}</p>
+      <p class="verdict">${verdict}</p>
+      <div class="chart-box"><canvas id="bench-chart"></canvas></div>${note}`;
+    if (benchChart) {
+      benchChart.destroy();
+      charts.delete(benchChart);
+    }
+    benchChart = lineChart(
+      $("#bench-chart"),
+      r.points.map((x) => x.t),
+      [
+        { label: "Mon portefeuille", data: r.points.map((x) => x.portfolio), borderColor: cssVar("--accent") },
+        { label: r.short, data: r.points.map((x) => x.benchmark), borderColor: cssVar("--bench"), borderWidth: 1.8 },
+      ],
+    );
+  };
+  view.querySelectorAll(".ref").forEach((b) =>
+    b.addEventListener("click", () => {
+      showDetail(refs.find((r) => r.id === b.dataset.id));
+      $("#bench-detail").scrollIntoView({ behavior: "smooth", block: "start" });
+    }),
   );
+  showDetail(sel);
+}
+
+// ---------- Remonter le temps ----------
+
+const WAYBACK_QUICK = [
+  ["1 mois", 1],
+  ["6 mois", 6],
+  ["1 an", 12],
+  ["3 ans", 36],
+  ["5 ans", 60],
+];
+function monthsAgo(n) {
+  const d = new Date();
+  d.setMonth(d.getMonth() - n);
+  return new Intl.DateTimeFormat("en-CA", TZ).format(d);
+}
+
+async function renderWayback(token) {
+  setHeader("Remonter le temps", { back: true });
+  setTab("");
+  state.wbDate ??= monthsAgo(12);
+  view.classList.add("has-action");
+  view.innerHTML = `
+    <section class="card">
+      <p style="margin:0 0 12px">Choisis une date dans le passé, puis indique <b>combien tu aurais investi ce jour-là</b> dans chaque action.
+        L'app calcule ce que ça vaudrait aujourd'hui.</p>
+      <div class="chips quick" id="wb-quick">${WAYBACK_QUICK.map(([l, n]) => `<button type="button" class="chip" data-n="${n}">Il y a ${l}</button>`).join("")}</div>
+      <label class="field" style="margin:10px 0 0"><span>Date</span>
+        <input class="input" type="date" id="wb-date" value="${state.wbDate}" max="${today()}"></label>
+    </section>
+    <section class="card" id="wb-lines"><div class="skeleton" style="height:140px"></div></section>
+    <div class="action-bar"><button class="btn" id="wb-apply" disabled>Appliquer au portefeuille</button></div>`;
+
+  let lines = [];
+  const dirty = new Map(); // symbole -> montant saisi
+  let seq = 0;
+  let timer;
+
+  const load = async () => {
+    const my = ++seq;
+    dirty.clear();
+    $("#wb-apply").disabled = true;
+    $("#wb-lines").innerHTML = `<div class="skeleton" style="height:140px"></div>`;
+    try {
+      const d = await api(`/api/wayback?date=${state.wbDate}`);
+      if (my !== seq || stale(token)) return;
+      lines = d.lines;
+      draw();
+    } catch (e) {
+      if (my === seq) $("#wb-lines").innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    }
+  };
+
+  const lineHtml = (l) => {
+    if (l.error) {
+      return `<div class="wb-line"><div class="title">${esc(l.name)}</div><div class="muted small">${esc(l.error)}</div></div>`;
+    }
+    const val = dirty.has(l.symbol) ? dirty.get(l.symbol) : l.amount || "";
+    return `<div class="wb-line" data-symbol="${esc(l.symbol)}">
+      <div class="wb-top">
+        <div class="main"><div class="title">${esc(l.name)}</div>
+          <div class="muted small">${native(l.priceThen, l.currency)} le ${date(l.execDate)} → ${native(l.priceNow, l.currency)} aujourd'hui
+            <span class="${tone(l.changePct)}">(${pct(l.changePct)})</span></div></div>
+        <label class="wb-amount"><input class="input" type="number" inputmode="decimal" min="0" step="any" placeholder="0" value="${val}" aria-label="Montant investi le ${date(l.execDate)}"><span>€</span></label>
+      </div>
+      <div class="wb-preview small muted" data-preview></div>
+      ${l.soldCount ? `<div class="muted small">${l.soldCount} achat(s) de ce jour déjà vendu(s) : non modifiés ici.</div>` : ""}
+    </div>`;
+  };
+
+  const draw = () => {
+    const ok = lines.filter((l) => !l.error);
+    $("#wb-lines").innerHTML = `
+      <h2>Le ${date(state.wbDate)}, j'investis…</h2>
+      ${lines.length ? "" : `<p class="muted small">Ton portefeuille est vide : ajoute une action.</p>`}
+      ${lines.map(lineHtml).join("")}
+      <button class="btn secondary" id="wb-add" type="button" style="margin-top:12px">+ Ajouter une action</button>
+      <div class="estimate" id="wb-total" style="margin-top:14px" ${ok.length ? "" : "hidden"}></div>
+      <p class="muted small" style="margin:8px 0 0">Le montant est le total débité ce jour-là, frais compris (${feeLabel() || "frais simulés"}). Mettre 0 retire l'achat de ce jour.
+        Si la bourse était fermée, l'achat se fait au jour de bourse suivant.</p>`;
+    $("#wb-lines").querySelectorAll(".wb-line input").forEach((inp) =>
+      inp.addEventListener("input", () => {
+        const sym = inp.closest(".wb-line").dataset.symbol;
+        const v = parseFloat(String(inp.value).replace(",", ".")) || 0;
+        const orig = lines.find((l) => l.symbol === sym).amount || 0;
+        if (Math.abs(v - orig) < 0.005) dirty.delete(sym);
+        else dirty.set(sym, v);
+        $("#wb-apply").disabled = true;
+        clearTimeout(timer);
+        timer = setTimeout(preview, 350);
+      }),
+    );
+    $("#wb-add").addEventListener("click", () => openAddSheet());
+    preview();
+  };
+
+  const preview = async () => {
+    const items = lines
+      .filter((l) => !l.error)
+      .map((l) => ({ symbol: l.symbol, amount: dirty.has(l.symbol) ? dirty.get(l.symbol) : l.amount || 0 }));
+    if (!items.length) return;
+    const my = ++seq;
+    try {
+      const d = await api("/api/wayback?dryRun=1", { method: "POST", body: { date: state.wbDate, items } });
+      if (my !== seq || stale(token)) return;
+      for (const p of d.lines) {
+        const el = $(`.wb-line[data-symbol="${CSS.escape(p.symbol)}"] [data-preview]`);
+        if (!el) continue;
+        el.innerHTML = p.newAmount
+          ? `→ vaudrait <b>${eur(p.valueNow)}</b> aujourd'hui · <span class="${tone(p.pnl)}">${signedEur(p.pnl)} (${pct(p.pnlPct)})</span>`
+          : "";
+      }
+      const t = d.totals;
+      const box = $("#wb-total");
+      box.hidden = false;
+      box.innerHTML = `
+        <div class="line"><span class="muted">Investi le ${date(state.wbDate)}</span><span>${eur(t.invested)}</span></div>
+        <div class="line"><span class="muted">Valeur aujourd'hui</span><span>${eur(t.valueNow)}</span></div>
+        <div class="line total"><span>Gain</span><span class="${tone(t.pnl)}">${signedEur(t.pnl)} (${pct(t.pnlPct)})</span></div>`;
+      $("#wb-apply").disabled = dirty.size === 0;
+      $("#wb-apply").textContent = dirty.size ? `Appliquer ${dirty.size} modification${dirty.size > 1 ? "s" : ""}` : "Appliquer au portefeuille";
+    } catch (e) {
+      if (my === seq) toast(e.message);
+    }
+  };
+
+  const openAddSheet = () => {
+    $("#sheet-body").innerHTML = `
+      <h3>Ajouter une action</h3>
+      <input class="input search-input" id="wb-q" type="search" placeholder="Rechercher une action" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+      <ul class="list" id="wb-results" style="margin-top:8px"></ul>
+      <button class="btn secondary" type="button" id="wb-cancel" style="margin-top:12px">Fermer</button>`;
+    sheet.showModal();
+    $("#wb-cancel").onclick = closeSheet;
+    let t2;
+    let s2 = 0;
+    $("#wb-q").addEventListener("input", (e) => {
+      clearTimeout(t2);
+      t2 = setTimeout(async () => {
+        const q = e.target.value.trim();
+        const my = ++s2;
+        if (q.length < 2) return ($("#wb-results").innerHTML = "");
+        try {
+          const { results } = await api(`/api/search?q=${encodeURIComponent(q)}`);
+          if (my !== s2) return;
+          $("#wb-results").innerHTML = results.length
+            ? results.map((r) => `<li><button class="row" data-symbol="${esc(r.symbol)}"><div class="avatar">${initials(r.name)}</div>
+                <div class="main"><div class="title">${esc(r.name)}</div><div class="sub">${esc(r.symbol)} · ${esc(r.exchange)}</div></div></button></li>`).join("")
+            : `<li class="muted small" style="padding:10px 0">Aucune action trouvée.</li>`;
+        } catch (err) {
+          $("#wb-results").innerHTML = `<li class="error">${esc(err.message)}</li>`;
+        }
+      }, 300);
+    });
+    $("#wb-results").addEventListener("click", async (e) => {
+      const b = e.target.closest("[data-symbol]");
+      if (!b) return;
+      const symbol = b.dataset.symbol;
+      closeSheet();
+      if (lines.some((l) => l.symbol === symbol)) return toast("Cette action est déjà dans la liste");
+      try {
+        const d = await api("/api/wayback?dryRun=1", { method: "POST", body: { date: state.wbDate, items: [{ symbol, amount: 0 }] } });
+        lines.push(d.lines[0]);
+        draw();
+        $(`.wb-line[data-symbol="${CSS.escape(symbol)}"] input`)?.focus();
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+    setTimeout(() => $("#wb-q").focus(), 50);
+  };
+
+  $("#wb-quick").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-n]");
+    if (!b) return;
+    state.wbDate = monthsAgo(Number(b.dataset.n));
+    $("#wb-date").value = state.wbDate;
+    load();
+  });
+  $("#wb-date").addEventListener("change", (e) => {
+    if (!e.target.value) return;
+    state.wbDate = e.target.value;
+    load();
+  });
+  $("#wb-apply").addEventListener("click", async () => {
+    if (!dirty.size) return;
+    const items = [...dirty].map(([symbol, amount]) => ({ symbol, amount }));
+    $("#wb-apply").disabled = true;
+    try {
+      await api("/api/wayback", { method: "POST", body: { date: state.wbDate, items } });
+      toast(`Portefeuille modifié au ${date(state.wbDate)}`);
+      state.compare = null;
+      await loadPortfolio(true);
+      location.hash = "#/";
+    } catch (e) {
+      toast(e.message);
+      $("#wb-apply").disabled = false;
+    }
+  });
+  load();
 }
 
 function positionRow(x) {
