@@ -52,17 +52,11 @@ const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" 
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-const initials = (name) =>
-  esc(
-    String(name)
-      .replace(/[^\p{L}\p{N} ]/gu, "")
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0])
-      .join("")
-      .toUpperCase(),
-  );
+const initials = (name) => {
+  const words = String(name).replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).filter(Boolean);
+  const txt = words.length === 1 ? words[0].slice(0, 2) : words.slice(0, 2).map((w) => w[0]).join("");
+  return esc(txt.toUpperCase());
+};
 
 // ---------- API ----------
 
@@ -295,7 +289,7 @@ async function renderDashboard(token) {
     view.innerHTML = `<div class="card empty">
       <h2>Aucun investissement simulé</h2>
       <p>Cherche une action européenne, choisis une date et un montant : l'app calcule ce que tu aurais gagné ou perdu.</p>
-      <a class="btn" href="#/search">Rechercher une action</a></div>`;
+      <a class="btn" href="#/search">Découvrir des actions</a></div>`;
     return;
   }
 
@@ -430,18 +424,20 @@ function positionRow(x) {
 
 let lastQuery = "";
 async function renderSearch(token) {
-  setHeader("Rechercher");
+  setHeader("Découvrir");
   setTab("search");
   view.innerHTML = `
     <div class="card">
-      <input class="input search-input" id="q" type="search" placeholder="Nom ou ticker (ex : TotalEnergies, MC.PA)"
+      <input class="input search-input" id="q" type="search" placeholder="Rechercher une action"
         autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" value="${esc(lastQuery)}">
       <p class="muted small" style="margin:10px 2px 0">Actions des bourses européennes (Euronext, XETRA, Madrid, Milan, Londres, Suisse, nordiques…).
       Si une action n'apparaît pas, tape directement son ticker Yahoo, par ex. <b>ITX.MC</b>.</p>
     </div>
-    <div class="card" id="results" hidden><ul class="list"></ul></div>`;
+    <div class="card" id="results" hidden><ul class="list"></ul></div>
+    <div id="discover"></div>`;
   const input = $("#q");
   const box = $("#results");
+  const disc = $("#discover");
   let timer;
   let seq = 0;
   const run = async () => {
@@ -449,10 +445,12 @@ async function renderSearch(token) {
     lastQuery = q;
     if (q.length < 2) {
       box.hidden = true;
+      disc.hidden = false;
       return;
     }
     const my = ++seq;
     box.hidden = false;
+    disc.hidden = true;
     box.querySelector("ul").innerHTML = `<li class="muted small" style="padding:12px 0">Recherche…</li>`;
     try {
       const { results } = await api(`/api/search?q=${encodeURIComponent(q)}`);
@@ -477,8 +475,95 @@ async function renderSearch(token) {
     timer = setTimeout(run, 300);
   });
   if (lastQuery) run();
-  // Sur iOS le focus n'ouvre le clavier que suite à un geste ; on essaie quand même.
-  setTimeout(() => input.focus(), 50);
+  renderDiscover(disc, token);
+}
+
+// ---------- Découvrir : tendances et actions à connaître ----------
+
+// Mini-graphique de la dernière séance (SVG), avec la clôture de la veille en pointillés.
+function sparkline(closes, prev) {
+  if (!closes || closes.length < 2) return "";
+  const w = 44;
+  const h = 24;
+  const vals = [...closes, prev];
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const y = (v) => (max === min ? h / 2 : h - 2 - ((v - min) / (max - min)) * (h - 4));
+  const pts = closes.map((c, i) => `${((i / (closes.length - 1)) * w).toFixed(1)},${y(c).toFixed(1)}`).join(" ");
+  const col = closes[closes.length - 1] >= prev ? "var(--up)" : "var(--down)";
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+    <line x1="0" x2="${w}" y1="${y(prev).toFixed(1)}" y2="${y(prev).toFixed(1)}" stroke="var(--border)" stroke-dasharray="2 2"/>
+    <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+function quoteRight(q) {
+  if (!q) return `<div class="right muted small">—</div>`;
+  return `<div class="right"><div class="title">${native(q.price, q.currency)}</div>
+    <div class="small ${tone(q.changePct)}">${pct(q.changePct)}</div></div>`;
+}
+
+function trendRow(q) {
+  return `<li><a class="row" href="#/stock/${encodeURIComponent(q.symbol)}">
+    <div class="avatar">${initials(q.name)}</div>
+    <div class="main"><div class="title">${esc(q.name)}</div><div class="sub">${esc(q.symbol)} · ${esc(q.exchange)}</div></div>
+    ${sparkline(q.closes, q.prevClose)}
+    ${quoteRight(q)}
+  </a></li>`;
+}
+
+function featuredRow(f) {
+  return `<li><a class="row top" href="#/stock/${encodeURIComponent(f.symbol)}">
+    <div class="avatar">${initials(f.name)}</div>
+    <div class="main"><div class="title">${esc(f.name)}</div>
+      <div class="sub">${esc(f.sector)} · ${esc(f.country)}</div>
+      <div class="why">${esc(f.why)}</div></div>
+    <div class="right">${f.quote ? sparkline(f.quote.closes, f.quote.prevClose) : ""}${quoteRight(f.quote)}</div>
+  </a></li>`;
+}
+
+async function renderDiscover(el, token) {
+  if (!state.discover || Date.now() - state.discover.at > 120_000) {
+    el.innerHTML = skeleton();
+    try {
+      state.discover = { at: Date.now(), data: await api("/api/discover") };
+    } catch (e) {
+      if (!stale(token)) el.innerHTML = `<div class="card"><div class="error">${esc(e.message)}</div></div>`;
+      return;
+    }
+  }
+  if (stale(token)) return;
+  const d = state.discover.data;
+  const session = d.asOf
+    ? new Date(d.asOf * 1000).toLocaleDateString("fr-FR", { ...TZ, weekday: "long", day: "numeric", month: "long" })
+    : "";
+  const list = (key) => {
+    const items = d[key];
+    return items.length
+      ? items.map(trendRow).join("")
+      : `<li class="muted small" style="padding:12px 0">Aucune action en ${key === "gainers" ? "hausse" : "baisse"} sur cette séance.</li>`;
+  };
+  el.innerHTML = `
+    <section class="card">
+      <div class="card-head">
+        <h2>Tendances du jour</h2>
+        ${seg("trend", [["gainers", "Hausses"], ["losers", "Baisses"]], state.trendTab || "gainers")}
+      </div>
+      <p class="muted small" style="margin:-4px 0 4px">Plus fortes variations parmi ${d.universeSize} grandes actions européennes${session ? `, séance du ${session}` : ""}.
+        <a href="#/methode/decouvrir">Comment c'est choisi ?</a></p>
+      <ul class="list" id="trend-list">${list(state.trendTab || "gainers")}</ul>
+    </section>
+    <section class="card">
+      <h2>${d.featured.length} actions à connaître</h2>
+      <p class="muted small" style="margin:-4px 0 4px">Des leaders européens de secteurs variés, très suivis par les investisseurs. Ce ne sont pas des recommandations.</p>
+      <ul class="list">${d.featured.map(featuredRow).join("")}</ul>
+    </section>`;
+  el.querySelector('[data-seg="trend"]').addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    state.trendTab = b.dataset.v;
+    e.currentTarget.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    $("#trend-list").innerHTML = list(state.trendTab);
+  });
 }
 
 // ---------- Méthode ----------
@@ -526,6 +611,8 @@ async function renderStock(symbol, token) {
       <div class="chart-box small" style="margin-top:14px"><canvas id="pc"></canvas></div>
       <div style="margin-top:10px">${seg("srange", [["1d", "1J"], ["1w", "1S"], ["1mo", "1M"], ["1y", "1A"], ["5y", "5A"], ["max", "Max"]], state.stockRange)}</div>
     </section>
+
+    ${featuredCard(q.symbol)}
 
     ${lots.length ? `<section class="card"><h2>Mes positions</h2>${lots.map(lotBlock).join("")}</section>` : ""}
 
@@ -582,6 +669,14 @@ function drawPrice(q) {
     [{ label: "Cours", data: pts.map((x) => x.close), borderColor: col, backgroundColor: col + "1f", fill: true }],
     { formatY: (v) => native(v, q.currency), intraday: q.intraday },
   );
+}
+
+function featuredCard(symbol) {
+  const f = state.config?.featured?.find((x) => x.symbol === symbol);
+  if (!f) return "";
+  return `<section class="card"><h2>Pourquoi la connaître</h2>
+    <div class="muted small">${esc(f.sector)} · ${esc(f.country)}</div>
+    <p style="margin:6px 0 0">${esc(f.why)}</p></section>`;
 }
 
 function lotBlock(x) {
