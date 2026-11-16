@@ -36,7 +36,7 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
 - **Vente simulée** (clôture d'une position, avec annulation possible) et suppression.
 - **Devises** : les actions cotées hors euro (GBp, CHF, SEK, DKK…) sont converties en € avec le taux de change
   historique du jour d'achat / de vente et le taux actuel pour la valorisation.
-- **Onglet « Méthode »** : explique chaque choix (source des données, prix d'exécution, frais avec formules
+- **Onglet « Méthode »** : bibliothèque de fiches courtes (une par sujet) qui explique chaque choix (source des données, prix d'exécution, frais avec formules
   et exemples, fractions, devises, calcul des gains, graphique, limites). Les paramètres affichés viennent de
   `/api/config`, donc des mêmes constantes que les calculs (`lib/fees.ts`).
 - **Accès protégé** par mot de passe (cookie de session signé, valable 1 an), activé dès que le secret `APP_PASSWORD` est défini.
