@@ -100,6 +100,7 @@ const state = {
   stockRange: "1y",
   protected: true,
   config: null,
+  gen: 0, // incrémenté à chaque changement de portefeuille
   portfolioId: (() => {
     try {
       return Number(localStorage.getItem("portfolioId")) || null;
@@ -123,21 +124,28 @@ const feeLink = () =>
   `<a href="#/methode/frais" class="muted">Frais de courtage${state.config ? ` (${feeLabel()})` : ""} ⓘ</a>`;
 
 async function loadPortfolio(force = false) {
-  if (state.loading) return state.loading;
+  const gen = state.gen;
+  if (state.loading && state.loadingGen === gen) return state.loading;
   if (!force && state.portfolio && Date.now() - state.lastLoad < 60_000) return state.portfolio;
   setRefreshing(true);
-  state.loading = api("/api/portfolio")
+  const req = api("/api/portfolio")
     .then((p) => {
+      // Réponse d'un chargement lancé avant un changement de portefeuille : on l'ignore.
+      if (gen !== state.gen) return loadPortfolio();
       state.portfolio = p;
       state.lastLoad = Date.now();
       updatedLabel();
       return p;
     })
     .finally(() => {
-      state.loading = null;
-      setRefreshing(false);
+      if (state.loading === req) {
+        state.loading = null;
+        setRefreshing(false);
+      }
     });
-  return state.loading;
+  state.loading = req;
+  state.loadingGen = gen;
+  return req;
 }
 
 function setRefreshing(on) {
@@ -242,11 +250,13 @@ function setHeader(title, { back = false, switcher = false } = {}) {
   const h = $("#title");
   if (switcher) {
     const name = state.portfolio?.portfolio?.name ?? "Portefeuille";
-    h.innerHTML = `<button class="pf-switch" id="pf-switch" aria-label="Changer de portefeuille">
-      <span class="pf-name">${esc(name)}</span>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>`;
-    $("#pf-switch").onclick = openPortfolioSheet;
-    document.title = `${name} · Simu Finance`;
+    const btn = $("#pf-switch");
+    if (btn) btn.querySelector(".pf-name").textContent = name; // on garde le même bouton (pas de tap perdu)
+    else
+      h.innerHTML = `<button type="button" class="pf-switch" id="pf-switch" aria-label="Changer de portefeuille">
+        <span class="pf-name">${esc(name)}</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>`;
+    document.title = `${title} · Simu Finance`;
   } else {
     h.textContent = title;
     document.title = `${title} · Simu Finance`;
@@ -256,7 +266,17 @@ function setHeader(title, { back = false, switcher = false } = {}) {
 
 // ---------- Portefeuilles ----------
 
+// Un seul écouteur sur la zone de titre : fonctionne même si le bouton vient d'être redessiné.
+$("#title").addEventListener("click", (e) => {
+  if (e.target.closest("#pf-switch")) openPortfolioSheet();
+});
+function openSheet() {
+  if (!sheet.open) sheet.showModal();
+}
+
 function resetPortfolioCaches() {
+  state.gen++;
+  state.loading = null;
   state.portfolio = null;
   state.lastLoad = 0;
   state.compare = null;
@@ -280,7 +300,7 @@ const yearsAgo = (n) => {
 
 async function openPortfolioSheet() {
   $("#sheet-body").innerHTML = `<h3>Mes portefeuilles</h3><div class="skeleton" style="height:120px"></div>`;
-  sheet.showModal();
+  openSheet();
   let list;
   try {
     ({ portfolios: list } = await api("/api/portfolios"));
@@ -311,8 +331,9 @@ async function openPortfolioSheet() {
       closeSheet();
       if (Number(b.dataset.id) !== currentId) {
         switchPortfolio(Number(b.dataset.id));
-        if (location.hash === "#/" || location.hash === "" || location.hash === "#/compare") route();
-        else location.hash = "#/";
+        const h = location.hash;
+        if (h.startsWith("#/wayback") || h.startsWith("#/history")) location.hash = "#/";
+        else route();
       }
     }),
   );
@@ -418,6 +439,7 @@ async function route() {
     else if (page === "methode") await renderMethod(arg, token);
     else if (page === "compare") await renderCompare(token);
     else if (page === "wayback") await renderWayback(token);
+    else if (page === "history") await renderHistory(token);
     else if (page === "stock" && arg) await renderStock(decodeURIComponent(arg), token);
     else await renderDashboard(token);
   } catch (e) {
@@ -529,6 +551,11 @@ async function renderDashboard(token) {
       </div>
     </section>` : ""}
 
+    <section class="card">
+      <div class="card-head"><h2>Dernières opérations</h2><a href="#/history" class="small">Tout l'historique ›</a></div>
+      ${timelineHtml(portfolioEvents(p).slice(0, 3))}
+    </section>
+
     ${open.length ? `<section class="card"><h2>Positions ouvertes (${open.length})</h2>
       <ul class="list">${open.map(positionRow).join("")}</ul></section>` : ""}
 
@@ -557,12 +584,13 @@ async function drawEvolution(token) {
   const period = state.dashPeriod;
   const metric = state.dashMetric;
   const msg = $("#evo-msg");
-  let cached = timelines[period];
+  const key = `${state.gen}:${period}`;
+  let cached = timelines[key];
   if (!cached || cached.at < state.lastLoad || Date.now() - cached.at > 120_000) {
     msg.hidden = false;
     msg.textContent = "Chargement…";
     try {
-      cached = timelines[period] = { at: Date.now(), data: await api(`/api/timeline?period=${period}`) };
+      cached = timelines[key] = { at: Date.now(), data: await api(`/api/timeline?period=${period}`) };
     } catch (e) {
       if (!stale(token)) msg.textContent = e.message;
       return;
@@ -609,8 +637,11 @@ async function renderCompare(token) {
     .then(() => !stale(token) && setHeader("Comparer", { switcher: true }))
     .catch(() => {});
   view.innerHTML = skeleton();
-  if (!state.compare || state.compare.at < state.lastLoad || Date.now() - state.compare.at > 300_000) {
-    state.compare = { at: Date.now(), data: await api("/api/benchmark") };
+  if (!state.compare || state.compare.gen !== state.gen || state.compare.at < state.lastLoad || Date.now() - state.compare.at > 300_000) {
+    const gen = state.gen;
+    const data = await api("/api/benchmark");
+    if (gen !== state.gen) return; // portefeuille changé entre-temps : un nouveau rendu est en cours
+    state.compare = { at: Date.now(), gen, data };
   }
   if (stale(token)) return;
   const d = state.compare.data;
@@ -707,6 +738,100 @@ async function renderCompare(token) {
     }),
   );
   showDetail(sel);
+}
+
+// ---------- Historique : frise des opérations du portefeuille ----------
+
+// Événements (démarrage, achats, ventes) du plus récent au plus ancien.
+function portfolioEvents(p) {
+  const ev = [];
+  for (const x of p.positions) {
+    ev.push({ type: "buy", date: x.buyDate, x });
+    if (x.status === "closed") ev.push({ type: "sell", date: x.sellDate, x });
+  }
+  if (p.portfolio?.startDate) ev.push({ type: "start", date: p.portfolio.startDate });
+  const order = { sell: 0, buy: 1, start: 2 };
+  return ev.sort((a, b) => (a.date === b.date ? order[a.type] - order[b.type] : a.date < b.date ? 1 : -1));
+}
+
+function eventHtml(e) {
+  if (e.type === "start") {
+    return `<li class="ev ev-start"><span class="ev-dot"></span>
+      <div class="ev-body"><div class="ev-head"><b>Démarrage du portefeuille</b><span class="muted small">${date(e.date)}</span></div></div></li>`;
+  }
+  const x = e.x;
+  const n = `${qty(x.quantity)} action${x.quantity >= 2 ? "s" : ""}`;
+  if (e.type === "buy") {
+    return `<li class="ev ev-buy"><span class="ev-dot"></span>
+      <a class="ev-body" href="#/stock/${encodeURIComponent(x.symbol)}">
+        <div class="ev-head"><span><span class="ev-tag">Achat</span> <b>${esc(x.name)}</b></span><span class="muted small">${date(e.date)}</span></div>
+        <div class="small">${n} à ${native(x.buyPrice, x.currency)}</div>
+        <div class="small muted">Investi ${eur(x.cost)}${x.buyFees ? ` · dont ${eur(x.buyFees)} de frais` : ""}</div>
+      </a></li>`;
+  }
+  return `<li class="ev ev-sell ${tone(x.pnl)}"><span class="ev-dot"></span>
+    <a class="ev-body" href="#/stock/${encodeURIComponent(x.symbol)}">
+      <div class="ev-head"><span><span class="ev-tag">Vente</span> <b>${esc(x.name)}</b></span><span class="muted small">${date(e.date)}</span></div>
+      <div class="small">${n} à ${native(x.sellPrice, x.currency)}</div>
+      <div class="small muted">Récupéré ${eur(x.value)}${x.sellFees ? ` · frais ${eur(x.sellFees)}` : ""} ·
+        <span class="${tone(x.pnl)}">${x.pnl >= 0 ? "plus" : "moins"}-value ${signedEur(x.pnl)} (${pct(x.pnlPct)})</span></div>
+    </a></li>`;
+}
+
+// Frise groupée par mois.
+function timelineHtml(events) {
+  const fmtMonth = (d) => {
+    const [y, m] = d.split("-").map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  };
+  let html = "";
+  let month = null;
+  for (const e of events) {
+    const m = e.date.slice(0, 7);
+    if (m !== month) {
+      if (month) html += "</ul>";
+      html += `<h3 class="sub-h ev-month">${fmtMonth(e.date)}</h3><ul class="frise">`;
+      month = m;
+    }
+    html += eventHtml(e);
+  }
+  return html + (month ? "</ul>" : "");
+}
+
+async function renderHistory(token) {
+  setHeader("Historique", { back: true });
+  setTab("");
+  view.innerHTML = skeleton();
+  const p = await loadPortfolio();
+  if (stale(token)) return;
+  const all = portfolioEvents(p);
+  const buys = all.filter((e) => e.type === "buy");
+  const sells = all.filter((e) => e.type === "sell");
+  const filter = state.histFilter ?? "all";
+  const draw = (f) => {
+    const list = f === "all" ? all : all.filter((e) => e.type === f);
+    $("#frise").innerHTML = list.length ? timelineHtml(list) : `<p class="muted small">Aucune opération.</p>`;
+  };
+  view.innerHTML = `
+    <section class="card">
+      <div class="muted small">Portefeuille « ${esc(p.portfolio?.name ?? "")} », depuis le ${date(p.portfolio?.startDate)}</div>
+      <div class="bench-stats" style="margin-top:10px">
+        <div class="stat"><div class="k">${buys.length} achat${buys.length > 1 ? "s" : ""}</div><div class="v">${eur(p.summary.totalInvested)}</div></div>
+        <div class="stat"><div class="k">${sells.length} vente${sells.length > 1 ? "s" : ""}</div><div class="v">${eur(p.summary.proceeds)}</div></div>
+      </div>
+    </section>
+    <section class="card">
+      <div style="margin-bottom:6px">${seg("hist", [["all", "Tout"], ["buy", "Achats"], ["sell", "Ventes"]], filter)}</div>
+      <div id="frise"></div>
+    </section>`;
+  draw(filter);
+  view.querySelector('[data-seg="hist"]').addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    state.histFilter = b.dataset.v;
+    e.currentTarget.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    draw(state.histFilter);
+  });
 }
 
 // ---------- Remonter le temps ----------
@@ -844,7 +969,7 @@ async function renderWayback(token) {
       <input class="input search-input" id="wb-q" type="search" placeholder="Rechercher une action" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
       <ul class="list" id="wb-results" style="margin-top:8px"></ul>
       <button class="btn secondary" type="button" id="wb-cancel" style="margin-top:12px">Fermer</button>`;
-    sheet.showModal();
+    openSheet();
     $("#wb-cancel").onclick = closeSheet;
     let t2;
     let s2 = 0;
@@ -931,8 +1056,9 @@ function positionRow(x) {
 
 let lastQuery = "";
 async function renderSearch(token) {
-  setHeader("Découvrir");
+  setHeader("Découvrir", { switcher: true });
   setTab("search");
+  if (!state.portfolio) loadPortfolio().then(() => !stale(token) && setHeader("Découvrir", { switcher: true })).catch(() => {});
   view.innerHTML = `
     <div class="card">
       <input class="input search-input" id="q" type="search" placeholder="Rechercher une action"
@@ -1085,7 +1211,7 @@ async function renderMethod(section, token) {
     setHeader(art.title, { back: true });
     view.innerHTML = art.html + `<a class="btn secondary" href="#/methode">Toutes les fiches</a>`;
   } else {
-    setHeader("Méthode");
+    setHeader("Méthode", { switcher: true });
     view.innerHTML = `<p class="muted small" style="margin:0 2px 4px">Comment l'app calcule tout, en fiches courtes.</p>${libraryHtml(cfg)}`;
   }
   window.scrollTo(0, 0);
@@ -1311,7 +1437,7 @@ function openBuySheet(q) {
       <p class="muted small" style="margin:10px 2px 0">Fractions d'actions autorisées. Frais de courtage (${feeLabel() || "simulés"}) inclus dans le montant.
         <a href="#/methode/prix">Comment c'est calculé ?</a></p>
     </form>`;
-  sheet.showModal();
+  openSheet();
   const form = $("#buy");
   const est = $("#est");
   const err = $("#buy-err");
@@ -1438,7 +1564,7 @@ function openSellSheet(lot) {
         <button class="btn" type="submit" id="sell-btn" disabled>Vendre</button>
       </div>
     </form>`;
-  sheet.showModal();
+  openSheet();
   const form = $("#sell");
   const est = $("#sell-est");
   const err = $("#sell-err");
