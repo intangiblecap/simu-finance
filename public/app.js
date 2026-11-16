@@ -1,5 +1,5 @@
 // Simu Finance — interface (vanilla JS, sans build).
-import { SECTIONS, methodHtml, ratePct } from "./method.js";
+import { articleHtml, libraryHtml, ratePct } from "./method.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const view = $("#view");
@@ -412,7 +412,7 @@ async function route() {
   view.classList.remove("has-action");
   const hash = location.hash.replace(/^#/, "") || "/";
   const [, page, arg] = hash.split("/");
-  if (page !== "methode") window.scrollTo(0, 0);
+  window.scrollTo(0, 0);
   try {
     if (page === "search") await renderSearch(token);
     else if (page === "methode") await renderMethod(arg, token);
@@ -1076,20 +1076,19 @@ async function renderDiscover(el, token) {
 // ---------- Méthode ----------
 
 async function renderMethod(section, token) {
-  setHeader("Méthode de calcul");
   setTab("methode");
-  if (!view.querySelector(".doc")) {
-    view.innerHTML = skeleton();
-    const cfg = await getConfig();
-    if (stale(token)) return;
-    view.innerHTML = methodHtml(cfg);
+  const cfg = state.config ?? (state.config = await getConfig());
+  if (stale(token)) return;
+  const art = section ? articleHtml(section, cfg) : null;
+  if (art) {
+    // Une fiche ouverte depuis la bibliothèque.
+    setHeader(art.title, { back: true });
+    view.innerHTML = art.html + `<a class="btn secondary" href="#/methode">Toutes les fiches</a>`;
+  } else {
+    setHeader("Méthode");
+    view.innerHTML = `<p class="muted small" style="margin:0 2px 4px">Comment l'app calcule tout, en fiches courtes.</p>${libraryHtml(cfg)}`;
   }
-  view.querySelectorAll(".toc a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#/methode/${section}`));
-  const target = section && SECTIONS.some(([id]) => id === section) ? document.getElementById(section) : null;
-  if (target) {
-    const top = target.getBoundingClientRect().top + window.scrollY - $(".topbar").offsetHeight - 8;
-    window.scrollTo({ top, behavior: "smooth" });
-  } else window.scrollTo(0, 0);
+  window.scrollTo(0, 0);
 }
 
 // ---------- Fiche action ----------
