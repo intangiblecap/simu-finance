@@ -22,7 +22,8 @@ export const SECTIONS = [
   ["devises", "Devises"],
   ["gains", "Calcul des gains"],
   ["graphique", "Graphique d'évolution"],
-  ["indices", "Comparer à un indice"],
+  ["indices", "Comparer : indices et inflation"],
+  ["wayback", "Remonter le temps"],
   ["decouvrir", "Tendances et actions à connaître"],
   ["limites", "Ce qui n'est pas simulé"],
 ];
@@ -162,7 +163,7 @@ export function methodHtml(cfg) {
   </section>
 
   <section class="card doc" id="indices">
-    <h2>Comparer à un indice</h2>
+    <h2>Comparer : indices et inflation</h2>
     <p>Un <b>indice</b> mesure l'évolution d'un panier d'actions représentatif d'un marché. Le comparer à ton portefeuille répond à la vraie question : <b>« mes choix d'actions ont-ils fait mieux que si j'avais simplement acheté tout le marché ? »</b> Aujourd'hui, on peut acheter un indice entier en une fois grâce aux <b>ETF</b> (fonds indiciels cotés), pour des frais très faibles. Si ton portefeuille fait moins bien que l'indice, un ETF aurait été plus rentable, avec moins d'efforts.</p>
 
     <h3>Les références proposées</h3>
@@ -173,6 +174,8 @@ export function methodHtml(cfg) {
     <ul>
       <li><b>Pourquoi le STOXX Europe 600 par défaut ?</b> Une référence doit ressembler à ce dans quoi tu investis. Tu achètes des actions européennes : l'indice le plus large du marché européen est la comparaison la plus juste. Le CAC 40 convient si tu n'achètes que des actions françaises.</li>
       <li><b>Le S&amp;P 500</b> est la référence mondiale des marchés actions. Il est coté en dollars : on le convertit en euros, donc la comparaison inclut l'effet de change (comme pour un Européen qui achèterait un ETF S&amp;P 500).</li>
+      <li><b>L'inflation</b> n'est pas un placement : c'est la hausse générale des prix. On la traite comme un placement qui rapporterait exactement l'inflation. C'est le <b>minimum à battre</b> : en dessous, ton argent achète moins de choses qu'avant, même si ton gain affiché est positif. Le <b>gain réel</b> = ton gain − ce qu'aurait « rapporté » l'inflation.</li>
+      <li><b>Pourquoi pas le PIB ?</b> Le PIB mesure la taille de l'économie d'un pays, pas le rendement d'un placement : on ne peut pas l'acheter, il n'est publié que tous les trimestres et il est souvent révisé. Les marchés boursiers anticipent d'ailleurs l'économie au lieu de la suivre. Les indices boursiers et l'inflation sont donc des références plus utiles.</li>
       <li><b>Les bons du Trésor américain</b> ne sont pas des actions : ce sont des prêts à très court terme à l'État américain, considérés comme le placement le plus sûr au monde. Leur taux est appelé <b>taux sans risque</b>. Si ton portefeuille fait moins bien, tu as pris le risque des actions… pour gagner moins qu'un placement sans risque. (Le « bond » à 10 ans dont on parle souvent est un taux long, qui sert plutôt à évaluer les actions qu'à s'y comparer.)</li>
     </ul>
 
@@ -186,9 +189,22 @@ export function methodHtml(cfg) {
     <div class="formula">parts d'indice = montant investi ÷ (1&nbsp;+&nbsp;${T}) ÷ niveau de l'indice le jour de l'achat</div>
     <div class="formula">gain de l'indice = parts × niveau actuel − montant investi</div>
     <div class="formula">écart = gain de mon portefeuille − gain de l'indice</div>
+    <p>Pour l'inflation, on utilise l'<b>indice des prix à la consommation harmonisé (IPCH) de la France</b>, publié chaque mois par Eurostat. Il est interpolé jour par jour, puis prolongé au rythme moyen des 12 derniers mois pour les mois pas encore publiés (environ un mois et demi de retard) :</p>
+    <div class="formula">gain de l'inflation = montant investi × (indice aujourd'hui ÷ indice le jour de l'achat − 1)</div>
     <p>Pour le taux sans risque, l'argent est rémunéré chaque jour au taux des bons du Trésor à 3 mois :</p>
     <div class="formula">valeur(j) = valeur(j−1) × (1 + taux annuel × jours écoulés ÷ 360)</div>
     <p class="muted small">Les indices utilisés sont des indices « de prix », sans dividendes, comme ton portefeuille simulé : la comparaison est donc cohérente. Exception : l'ETF MSCI World réinvestit ses dividendes, ce qui l'avantage légèrement. Le taux sans risque est appliqué tel quel en euros, sans effet de change.</p>
+  </section>
+
+  <section class="card doc" id="wayback">
+    <h2>Remonter le temps</h2>
+    <p>Cet écran permet de <b>réécrire ton portefeuille à une date passée</b> : tu choisis un jour, puis le montant que tu aurais investi ce jour-là dans chaque action.</p>
+    <ul>
+      <li>La liste reprend les actions de ton portefeuille, avec leur cours ce jour-là et aujourd'hui. Le bouton <b>+</b> en ajoute d'autres.</li>
+      <li>Le montant saisi est le <b>total investi ce jour-là, frais compris</b>, exactement comme un achat normal (même prix d'exécution, mêmes frais, fractions autorisées).</li>
+      <li>Si tu avais déjà des achats ce jour-là pour cette action, ils sont <b>remplacés</b> par le nouveau montant. Mettre <b>0</b> les supprime. Les achats déjà vendus ne sont pas modifiés.</li>
+      <li>L'aperçu montre, avant d'appliquer, ce que vaudrait chaque montant aujourd'hui. Rien n'est enregistré tant que tu n'as pas appuyé sur <b>Appliquer</b>.</li>
+    </ul>
   </section>
 
   <section class="card doc" id="decouvrir">

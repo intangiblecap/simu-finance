@@ -14,6 +14,6 @@ export const onRequestGet: PagesFunction<Env> = async () =>
     trendUniverseSize: new Set(TREND_UNIVERSE).size,
     trendTopN: TREND_TOP_N,
     featured: FEATURED,
-    benchmarks: BENCHMARKS.map(({ id, name, description, kind, currency }) => ({ id, name, description, kind, currency })),
+    benchmarks: BENCHMARKS.map(({ id, name, short, description, kind, group }) => ({ id, name, short, description, kind, group })),
     defaultBenchmark: DEFAULT_BENCHMARK,
   });

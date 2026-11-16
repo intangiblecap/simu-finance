@@ -11,9 +11,12 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
 - **Tableau de bord** : valeur du portefeuille, plus-value totale / latente / réalisée, variation du jour,
   graphique d'évolution (valeur vs montant investi, ou gain cumulé) sur 1 jour (pas de 5 min),
   1 semaine (pas de 30 min) ou 1 mois (journalier), répartition par action, positions ouvertes et vendues.
-- **Comparer à un indice** (tableau de bord) : ce qu'aurait rapporté le même argent, aux mêmes dates, placé dans
-  le STOXX Europe 600, le CAC 40, l'Euro Stoxx 50, le S&P 500 (converti en €), le MSCI World ou en bons du Trésor US
-  (taux sans risque). Méthode du « portefeuille fantôme » (`lib/benchmark.ts`).
+- **Onglet « Comparer »** : ce qu'aurait rapporté le même argent, aux mêmes dates, dans chaque référence :
+  STOXX Europe 600, CAC 40, Euro Stoxx 50, S&P 500 (converti en €), MSCI World, bons du Trésor US (taux sans risque)
+  et **inflation France** (IPCH Eurostat), avec le **gain réel** après inflation. Méthode du « portefeuille fantôme »
+  (`lib/benchmark.ts`, `lib/inflation.ts`).
+- **Remonter le temps** : choisir une date passée, voir le cours de chaque action ce jour-là et aujourd'hui,
+  fixer le montant investi ce jour-là (0 = retirer, + pour ajouter une action), aperçu puis application.
 - **Fiche action** claire : en-tête (cours, variation du jour), graphique avec performance et plus haut / plus bas
   de la période, « Ma position » (synthèse + détail des achats et ventes), bouton « Simuler un achat » toujours
   visible qui ouvre un parcours guidé (Combien ? → Quand ? → récapitulatif).
@@ -62,7 +65,9 @@ functions/           API (Cloudflare Pages Functions)
   api/session.ts     GET   /api/session              (accès protégé ou non)
   api/config.ts      GET   /api/config               (paramètres de simulation)
   api/discover.ts    GET   /api/discover             (tendances + actions à connaître)
-  api/benchmark.ts   GET   /api/benchmark?id=        (comparaison avec un indice)
+  api/benchmark.ts   GET   /api/benchmark?ids=       (comparaison avec les références)
+  api/wayback.ts     GET   /api/wayback?date=        (remonter le temps : état à une date)
+                     POST  /api/wayback[?dryRun=1]   (fixer les montants investis à une date)
   api/positions/     POST  /api/positions[?dryRun=1] (achat)
                      PATCH /api/positions/:id[?dryRun=1] (vente / annulation)
                      DELETE /api/positions/:id
@@ -107,7 +112,7 @@ npm run db:migrate:local
 npm run dev                           # http://localhost:8788
 ```
 
-Si le runtime local n'a pas d'accès direct à Internet (derrière un proxy), lance `node scripts/dev-relay.mjs`
+Si le runtime local n'a pas d'accès direct à Internet (derrière un proxy), lance `node scripts/dev-relay.mjs` (relais Yahoo + Eurostat)
 et ajoute `YAHOO_RELAY=http://127.0.0.1:8790` dans `.dev.vars`.
 
 ## Limites connues

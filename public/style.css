@@ -292,3 +292,26 @@ dialog.sheet { max-height: 92vh; overflow-y: auto; }
 .step input[type="date"] { margin-top: 2px; }
 .seg-full .seg { display: grid; grid-template-columns: repeat(6, 1fr); width: 100%; }
 .seg-full .seg button { padding: 6px 2px; }
+
+/* ---------- Raccourcis du tableau de bord ---------- */
+.shortcuts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.shortcut {
+  display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--border); color: var(--text); font-size: 14px; line-height: 1.3;
+}
+.shortcut .ico { font-size: 22px; color: var(--accent); width: 28px; text-align: center; flex-shrink: 0; }
+
+/* ---------- Comparer ---------- */
+.ref-list .ref { padding: 10px 8px; margin: 0 -8px; width: calc(100% + 16px); border-radius: 10px; }
+.ref-list .ref.on { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.ref-list .ref .right { text-align: right; white-space: nowrap; }
+
+/* ---------- Remonter le temps ---------- */
+.wb-line { padding: 12px 0; border-top: 1px solid var(--border); }
+.wb-line .title { font-weight: 600; }
+.wb-top { display: flex; gap: 10px; align-items: center; }
+.wb-top .main { flex: 1; min-width: 0; }
+.wb-amount { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.wb-amount input { width: 96px; text-align: right; font-weight: 600; }
+.wb-preview { margin-top: 4px; }
+.wb-preview:empty { display: none; }
