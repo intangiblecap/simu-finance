@@ -12,6 +12,7 @@ import {
   rangeCovering,
   round,
   seriesAt,
+  shortName,
 } from "./yahoo";
 import { HttpError, todayParis } from "./http";
 
@@ -161,7 +162,7 @@ export async function computePortfolio(rows: PositionRow[]): Promise<Portfolio> 
       id: r.id,
       type: r.instrument_type,
       symbol: r.symbol,
-      name: r.name,
+      name: shortName(r.name),
       exchange: r.exchange,
       currency: r.currency,
       quantity: r.quantity,

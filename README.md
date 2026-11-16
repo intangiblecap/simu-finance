@@ -11,6 +11,8 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
 - **Tableau de bord** : valeur du portefeuille, plus-value totale / latente / réalisée, variation du jour,
   graphique d'évolution (valeur vs montant investi, ou gain cumulé) sur 1 jour (pas de 5 min),
   1 semaine (pas de 30 min) ou 1 mois (journalier), répartition par action, positions ouvertes et vendues.
+- **Historique** : frise des opérations (démarrage, achats, ventes avec plus-value), groupée par mois, filtrable ;
+  les 3 dernières sont reprises sur le tableau de bord.
 - **Plusieurs portefeuilles** (menu en haut à gauche), chacun avec une **date de démarrage** : aucun achat avant
   cette date ; un portefeuille démarré dans le passé s'ouvre sur « Remonter le temps » à cette date.
 - **Gain total sur toute la vie du portefeuille** : valeur actuelle + montants récupérés par les ventes − total

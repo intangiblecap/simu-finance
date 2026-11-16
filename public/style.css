@@ -349,3 +349,26 @@ dialog.sheet { max-height: 92vh; overflow-y: auto; }
 .lib-ico { font-size: 24px; line-height: 1; margin-bottom: 4px; }
 .art-ico { font-size: 34px; margin-bottom: 8px; }
 .doc h3 { margin-top: 16px; }
+
+/* ---------- Historique (frise) ---------- */
+.ev-month { margin: 14px 0 6px; }
+.ev-month:first-child { margin-top: 4px; }
+.frise { list-style: none; margin: 0; padding: 0 0 0 18px; position: relative; }
+.frise::before { content: ""; position: absolute; left: 5px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }
+.ev { position: relative; padding: 6px 0 10px; }
+.ev-dot {
+  position: absolute; left: -18px; top: 11px; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 3px var(--surface);
+}
+.ev-sell .ev-dot { background: var(--up); }
+.ev-sell.down .ev-dot { background: var(--down); }
+.ev-start .ev-dot { background: var(--muted); }
+.ev-body { display: block; color: var(--text); padding: 6px 10px; border-radius: 10px; }
+a.ev-body:active { background: var(--surface-2); }
+.ev-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.ev-head > span:first-child { min-width: 0; }
+.ev-head > .muted { white-space: nowrap; flex-shrink: 0; }
+.ev-tag { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); }
+.ev-sell .ev-tag { color: var(--up); }
+.ev-sell.down .ev-tag { color: var(--down); }
+.ev-start .ev-body { padding-top: 4px; }

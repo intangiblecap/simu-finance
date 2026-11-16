@@ -128,6 +128,13 @@ export const ARTICLES = [
       </ul>`,
   },
   {
+    id: "historique", group: "Fonctionnalités", icon: "🗓️", title: "Historique",
+    summary: "La frise de tes opérations.",
+    body: () => `
+      <p>Toutes les opérations du portefeuille, de la plus récente à la plus ancienne : <b>démarrage</b>, <b>achats</b> (montant, frais) et <b>ventes</b> (montant récupéré, plus- ou moins-value).</p>
+      <p>Un achat modifié avec « Remonter le temps » apparaît à sa nouvelle date ; un achat supprimé disparaît de la frise.</p>`,
+  },
+  {
     id: "decouvrir", group: "Fonctionnalités", icon: "🧭", title: "Découvrir",
     summary: "Tendances et actions à connaître.",
     body: (c) => `
