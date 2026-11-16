@@ -1,15 +1,15 @@
 import type { Env } from "../../../lib/env";
 import { HttpError, errorResponse, isIsoDate, json, readJson, todayParis } from "../../../lib/http";
 import { executionAt, loadMarket } from "../../../lib/portfolio";
+import { MIN_ORDER_EUR, floorQty, netFromBudget, orderFees } from "../../../lib/fees";
 import { EUROPEAN_EXCHANGES, exchangeSuffix, isEuropean, round } from "../../../lib/yahoo";
 
 interface BuyRequest {
   symbol?: string;
   date?: string; // défaut : aujourd'hui
   mode?: "amount" | "quantity";
-  amount?: number; // EUR, frais non compris
-  quantity?: number;
-  fees?: number; // EUR
+  amount?: number; // EUR, budget total frais inclus
+  quantity?: number; // fractions acceptées
 }
 
 // Achat simulé. Avec ?dryRun=1, renvoie l'estimation sans rien enregistrer.
@@ -21,8 +21,6 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (!isEuropean(symbol)) throw new HttpError(400, "Instrument non supporté");
     const date = body.date ?? todayParis();
     if (!isIsoDate(date)) throw new HttpError(400, "Date invalide");
-    const fees = Number(body.fees ?? 0);
-    if (!Number.isFinite(fees) || fees < 0) throw new HttpError(400, "Frais invalides");
 
     const { chart, fx } = await loadMarket(symbol, null, date);
     if (chart.instrumentType && chart.instrumentType !== "EQUITY") {
@@ -31,18 +29,22 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const exec = executionAt(chart, fx, date);
     const unitEur = exec.price * exec.fx;
 
+    // Fractions d'actions autorisées (voir QTY_DECIMALS). Frais calculés automatiquement.
     let quantity: number;
+    let fees: number;
     if (body.mode === "amount") {
       const amount = Number(body.amount);
-      if (!Number.isFinite(amount) || amount <= 0) throw new HttpError(400, "Montant invalide");
-      quantity = Math.floor(amount / unitEur);
-      if (quantity < 1) {
-        throw new HttpError(400, `Montant insuffisant : une action coûte ${round(unitEur)} €`);
-      }
+      if (!Number.isFinite(amount) || amount < MIN_ORDER_EUR) throw new HttpError(400, `Montant minimum : ${MIN_ORDER_EUR} €`);
+      const split = netFromBudget(amount);
+      fees = split.fees;
+      quantity = floorQty(split.net / unitEur);
     } else {
-      quantity = Number(body.quantity);
+      quantity = floorQty(Number(body.quantity));
       if (!Number.isFinite(quantity) || quantity <= 0) throw new HttpError(400, "Quantité invalide");
+      fees = orderFees(quantity * unitEur);
     }
+    if (quantity <= 0) throw new HttpError(400, "Montant trop faible");
+    const invested = round(quantity * unitEur);
 
     const estimate = {
       symbol: chart.symbol,
@@ -52,8 +54,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       price: exec.price,
       fx: exec.fx,
       quantity,
+      invested,
       fees,
-      total: round(quantity * unitEur + fees),
+      total: round(invested + fees),
     };
     if (dryRun) return json({ estimate });
 

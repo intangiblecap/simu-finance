@@ -9,16 +9,20 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
 ## Fonctionnalités (V1)
 
 - **Tableau de bord** : valeur du portefeuille, plus-value totale / latente / réalisée, variation du jour,
-  graphique d'évolution (valeur vs montant investi, ou gain cumulé) sur 1M / 3M / 6M / 1A / Tout,
-  répartition par action, liste des positions ouvertes et vendues.
+  graphique d'évolution (valeur vs montant investi, ou gain cumulé) sur 1 jour (pas de 5 min),
+  1 semaine (pas de 30 min) ou 1 mois (journalier), répartition par action, positions ouvertes et vendues.
 - **Recherche** d'actions sur les bourses européennes (Euronext Paris/Amsterdam/Bruxelles/Lisbonne/Milan,
   XETRA, Madrid, SIX, Londres, places nordiques…). Saisie directe d'un ticker Yahoo possible (ex : `ITX.MC`).
-- **Fiche action** : cours, variation, graphique (1M → Max), tes positions sur cette action.
-- **Achat simulé** : par montant en € (nombre entier d'actions) ou par nombre d'actions, à la date de ton choix,
-  avec frais de courtage optionnels. Aperçu du cours retenu et du total avant validation.
+- **Fiche action** : cours, variation, graphique (1J, 1S, 1M, 1A, 5A, Max), tes positions sur cette action.
+- **Achat simulé** : par montant en € ou par nombre d'actions, **fractions d'actions autorisées**
+  (ex : 15 € d'Apple), à la date de ton choix. Aperçu du cours, de la quantité, des frais et du total avant validation.
+- **Frais de courtage simulés automatiquement** : 0,5 % de chaque ordre (achat et vente), voir `lib/fees.ts`.
 - **Vente simulée** (clôture d'une position, avec annulation possible) et suppression.
 - **Devises** : les actions cotées hors euro (GBp, CHF, SEK, DKK…) sont converties en € avec le taux de change
   historique du jour d'achat / de vente et le taux actuel pour la valorisation.
+- **Onglet « Méthode »** : explique chaque choix (source des données, prix d'exécution, frais avec formules
+  et exemples, fractions, devises, calcul des gains, graphique, limites). Les paramètres affichés viennent de
+  `/api/config`, donc des mêmes constantes que les calculs (`lib/fees.ts`).
 - **Accès protégé** par mot de passe (cookie de session signé, valable 1 an), activé dès que le secret `APP_PASSWORD` est défini.
 - **Actualisation** des cours à l'ouverture de l'app et au retour dans l'app (et bouton ↻).
 
@@ -26,6 +30,8 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
 
 - Achat à une date passée : cours de **clôture** de ce jour, ou du premier jour de bourse suivant (week-end, férié).
 - Achat aujourd'hui : **dernier cours connu**.
+- Achat par montant : le montant saisi est le total débité, frais inclus (15 € → 14,93 € d'actions + 0,07 € de frais).
+  Quantité arrondie à 6 décimales.
 - Coût = quantité × cours × taux de change + frais. Plus-value = valeur actuelle (ou produit de la vente net de frais) − coût.
 - Les dividendes ne sont pas pris en compte (V1).
 
@@ -34,6 +40,7 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
 ```
 public/              Interface (HTML/CSS/JS sans build) + manifest PWA + icônes
   app.js             Application (tableau de bord, recherche, fiche action, achat/vente)
+  method.js          Onglet « Méthode » (explication des calculs)
   vendor/            Chart.js
 functions/           API (Cloudflare Pages Functions)
   _middleware.ts     Authentification sur tout le site
@@ -42,6 +49,9 @@ functions/           API (Cloudflare Pages Functions)
   api/search.ts      GET   /api/search?q=
   api/quote/[symbol] GET   /api/quote/:symbol?range=1y
   api/portfolio.ts   GET   /api/portfolio            (calcul du portefeuille)
+  api/timeline.ts    GET   /api/timeline?period=1d|1w|1m (évolution)
+  api/session.ts     GET   /api/session              (accès protégé ou non)
+  api/config.ts      GET   /api/config               (paramètres de simulation)
   api/positions/     POST  /api/positions[?dryRun=1] (achat)
                      PATCH /api/positions/:id[?dryRun=1] (vente / annulation)
                      DELETE /api/positions/:id
@@ -94,4 +104,6 @@ et ajoute `YAHOO_RELAY=http://127.0.0.1:8790` dans `.dev.vars`.
 - Yahoo Finance n'a pas d'API officielle : les endpoints peuvent changer ou limiter le débit (erreur 429).
   Les réponses sont mises en cache 5 min (recherche : 1 h) quand le cache Cloudflare est disponible.
 - La recherche Yahoo ne remonte pas toujours la cotation européenne principale : utiliser le ticker direct.
-- Pas de dividendes, pas de fractions d'actions en mode montant, une seule personne (pas de multi-comptes).
+- Pas de dividendes, une seule personne (pas de multi-comptes).
+- Graphique 1 jour / 1 semaine : taux de change et cours intrajournaliers ; un achat daté du jour démarre
+  à l'heure de saisie, un achat à une date passée à la clôture de ce jour.

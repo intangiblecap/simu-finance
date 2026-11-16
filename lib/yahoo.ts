@@ -3,6 +3,9 @@
 // Un User-Agent de navigateur complet déclenche des 429 chez Yahoo ; celui-ci passe.
 const UA = "Mozilla/5.0";
 
+// Durée de mise en cache des réponses Yahoo (secondes).
+export const CACHE_TTL = { quotes: 300, intraday: 120, search: 3600 };
+
 // Hôtes Yahoo. YAHOO_RELAY (optionnel, dev uniquement) permet de passer par un relais local
 // quand le runtime n'a pas d'accès direct à Internet.
 let Q1 = "https://query1.finance.yahoo.com";
@@ -129,7 +132,7 @@ export async function getChart(symbol: string, range: Range = "1y"): Promise<Cha
   const url =
     `${Q1}/v8/finance/chart/${encodeURIComponent(symbol)}` +
     `?range=${range}&interval=${iv}&includePrePost=false&events=div%2Csplit`;
-  const json = await cachedJson(url, 300);
+  const json = await cachedJson(url, CACHE_TTL.quotes);
   const result = json?.chart?.result?.[0];
   if (!result) {
     const msg = json?.chart?.error?.description;
@@ -167,11 +170,86 @@ export async function getChart(symbol: string, range: Range = "1y"): Promise<Cha
   };
 }
 
+// ---------- Séries courtes (graphiques 1 jour / 1 semaine / 1 mois) ----------
+
+export type Period = "1d" | "1w" | "1m";
+
+export interface SeriesPoint {
+  t: number; // timestamp (s)
+  date: string; // YYYY-MM-DD, heure locale de la place
+  close: number;
+}
+
+const PERIOD_PARAMS: Record<Period, { range: string; interval: string }> = {
+  "1d": { range: "1d", interval: "5m" },
+  "1w": { range: "5d", interval: "30m" },
+  "1m": { range: "1mo", interval: "1d" },
+};
+
+export async function getSeries(symbol: string, period: Period): Promise<{ points: SeriesPoint[]; meta: any }> {
+  const { range, interval } = PERIOD_PARAMS[period];
+  const url =
+    `${Q1}/v8/finance/chart/${encodeURIComponent(symbol)}` +
+    `?range=${range}&interval=${interval}&includePrePost=false`;
+  const json = await cachedJson(url, period === "1m" ? CACHE_TTL.quotes : CACHE_TTL.intraday);
+  const result = json?.chart?.result?.[0];
+  if (!result) throw new MarketDataError("Instrument introuvable", 404);
+  const meta = result.meta ?? {};
+  const gmt = meta.gmtoffset ?? 0;
+  const ts: number[] = result.timestamp ?? [];
+  const closes: (number | null)[] = result.indicators?.quote?.[0]?.close ?? [];
+  const points: SeriesPoint[] = [];
+  ts.forEach((t, i) => {
+    const c = closes[i];
+    if (c == null || !Number.isFinite(c)) return;
+    // En journalier, un point par jour (horodaté à minuit UTC de la date locale).
+    const date = toLocalDate(t, gmt);
+    points.push({ t: interval === "1d" ? Date.parse(date) / 1000 : t, date, close: round(c, 6) });
+  });
+  // Dernier cours connu.
+  if (meta.regularMarketPrice != null && meta.regularMarketTime) {
+    const date = toLocalDate(meta.regularMarketTime, gmt);
+    const last = points[points.length - 1];
+    if (interval === "1d") {
+      if (last && last.date === date) last.close = meta.regularMarketPrice;
+      else points.push({ t: Date.parse(date) / 1000, date, close: meta.regularMarketPrice });
+    } else if (last && meta.regularMarketTime > last.t && last.date === date) {
+      points.push({ t: meta.regularMarketTime, date, close: meta.regularMarketPrice });
+    }
+  }
+  return { points, meta };
+}
+
+// Série de change EUR par unité de devise sur la période (vide pour l'euro).
+export async function getFxSeries(currency: string, period: Period): Promise<{ points: SeriesPoint[]; current: number }> {
+  const { iso, factor } = fxBase(currency);
+  if (iso === "EUR") return { points: [], current: factor };
+  const { points, meta } = await getSeries(`${iso}EUR=X`, period);
+  return {
+    points: points.map((p) => ({ ...p, close: p.close * factor })),
+    current: (meta.regularMarketPrice ?? points[points.length - 1]?.close ?? 1) * factor,
+  };
+}
+
+// Valeur à l'instant t : dernier point <= t, sinon le premier point.
+export function seriesAt(points: SeriesPoint[], t: number): number | null {
+  if (!points.length) return null;
+  if (t < points[0].t) return points[0].close;
+  let lo = 0;
+  let hi = points.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (points[mid].t <= t) lo = mid;
+    else hi = mid - 1;
+  }
+  return points[lo].close;
+}
+
 export async function search(q: string): Promise<SearchResult[]> {
   const url =
     `${Q2}/v1/finance/search?q=${encodeURIComponent(q)}` +
     `&quotesCount=25&newsCount=0&listsCount=0&enableFuzzyQuery=false&lang=fr-FR&region=FR`;
-  const json = await cachedJson(url, 3600);
+  const json = await cachedJson(url, CACHE_TTL.search);
   const quotes: any[] = json?.quotes ?? [];
   const order = Object.keys(EUROPEAN_EXCHANGES);
   const results: SearchResult[] = quotes

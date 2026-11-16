@@ -1,4 +1,5 @@
 // Simu Finance — interface (vanilla JS, sans build).
+import { SECTIONS, methodHtml, ratePct } from "./method.js";
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const view = $("#view");
@@ -22,22 +23,30 @@ function native(n, cur) {
     return numFmt(2).format(n) + " " + cur;
   }
 }
-const qty = (n) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 4 }).format(n);
+const qty = (n) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: n < 1 ? 6 : 4 }).format(n);
 
 function date(d) {
   if (!d) return "";
   const [y, m, day] = d.split("-").map(Number);
   return new Date(y, m - 1, day).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
 }
-const shortDate = (d) => {
-  const [y, m, day] = d.split("-").map(Number);
-  return new Date(y, m - 1, day).toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
-};
-const tickDate = (d, long) => {
-  if (!long) return shortDate(d);
-  const [y, m] = d.split("-").map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
-};
+// Formatage d'un instant (timestamp en secondes) selon l'échelle du graphique.
+const TZ = { timeZone: "Europe/Paris" };
+function fmtT(t, kind, tooltip = false) {
+  const d = new Date(t * 1000);
+  if (kind === "time" || (tooltip && kind === "weekday"))
+    return d.toLocaleString("fr-FR", { ...TZ, ...(kind === "weekday" ? { weekday: "short", day: "numeric", month: "short" } : {}), hour: "2-digit", minute: "2-digit" });
+  if (kind === "weekday") return d.toLocaleDateString("fr-FR", { ...TZ, weekday: "short", day: "numeric" });
+  if (tooltip) return d.toLocaleDateString("fr-FR", { timeZone: "UTC", day: "numeric", month: "short", year: "numeric" });
+  if (kind === "month") return d.toLocaleDateString("fr-FR", { timeZone: "UTC", month: "short", year: "2-digit" });
+  return d.toLocaleDateString("fr-FR", { timeZone: "UTC", day: "numeric", month: "short" });
+}
+const dayKey = (t) => new Date(t * 1000).toLocaleDateString("fr-FR", TZ);
+function axisKind(ts, intraday) {
+  const span = ts.length > 1 ? ts[ts.length - 1] - ts[0] : 0;
+  if (intraday) return span <= 30 * 3600 ? "time" : "weekday";
+  return span > 300 * 86400 ? "month" : "day";
+}
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris" }).format(new Date());
 
 const esc = (s) =>
@@ -78,11 +87,25 @@ const state = {
   portfolio: null,
   loading: null,
   lastLoad: 0,
-  dashRange: "all",
+  dashPeriod: "1m",
   dashMetric: "value",
   stockRange: "1y",
   protected: true,
+  config: null,
 };
+
+// Paramètres de simulation (taux de frais…), servis par /api/config.
+let configPromise = null;
+function getConfig() {
+  configPromise ??= api("/api/config").catch((e) => {
+    configPromise = null;
+    throw e;
+  });
+  return configPromise;
+}
+const feeLabel = () => (state.config ? ratePct(state.config.feeRate) : "");
+const feeLink = () =>
+  `<a href="#/methode/frais" class="muted">Frais de courtage${state.config ? ` (${feeLabel()})` : ""} ⓘ</a>`;
 
 async function loadPortfolio(force = false) {
   if (state.loading) return state.loading;
@@ -124,10 +147,11 @@ function cssVar(name) {
 }
 const PALETTE = ["#1f6feb", "#12a37f", "#e3a008", "#d946ef", "#ef4444", "#0ea5e9", "#f97316", "#8b5cf6", "#14b8a6", "#64748b"];
 
-function lineChart(canvas, labels, datasets, { formatY = eur } = {}) {
+// labels : timestamps (s). intraday : points horodatés à la minute (sinon un point par jour).
+function lineChart(canvas, labels, datasets, { formatY = eur, intraday = false } = {}) {
   const grid = cssVar("--border");
   const muted = cssVar("--muted");
-  const longSpan = labels.length > 1 && Date.parse(labels[labels.length - 1]) - Date.parse(labels[0]) > 300 * 86_400_000;
+  const kind = axisKind(labels, intraday);
   const c = new Chart(canvas, {
     type: "line",
     data: { labels, datasets },
@@ -140,7 +164,7 @@ function lineChart(canvas, labels, datasets, { formatY = eur } = {}) {
         legend: { display: datasets.length > 1, labels: { color: muted, boxWidth: 12, boxHeight: 2, font: { size: 12 } } },
         tooltip: {
           callbacks: {
-            title: (items) => date(items[0].label),
+            title: (items) => fmtT(labels[items[0].dataIndex], kind, true),
             label: (item) => ` ${item.dataset.label} : ${formatY(item.parsed.y)}`,
           },
         },
@@ -148,7 +172,11 @@ function lineChart(canvas, labels, datasets, { formatY = eur } = {}) {
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: muted, maxTicksLimit: 5, maxRotation: 0, callback: (v, i) => tickDate(labels[i], longSpan) },
+          ticks:
+            kind === "weekday"
+              ? // Vue semaine : une étiquette au début de chaque journée.
+                { color: muted, autoSkip: false, maxRotation: 0, callback: (v, i) => (i === 0 || dayKey(labels[i]) !== dayKey(labels[i - 1]) ? fmtT(labels[i], kind) : null) }
+              : { color: muted, maxTicksLimit: 5, maxRotation: 0, callback: (v, i) => fmtT(labels[i], kind) },
         },
         y: {
           position: "right",
@@ -187,15 +215,6 @@ function doughnut(canvas, labels, values) {
   charts.add(c);
 }
 
-const RANGE_DAYS = { "1m": 31, "3m": 92, "6m": 183, "1y": 366, all: Infinity };
-function sliceRange(points, key) {
-  const days = RANGE_DAYS[key];
-  if (!Number.isFinite(days) || !points.length) return points;
-  const last = points[points.length - 1].date;
-  const from = new Date(Date.parse(last) - days * 86_400_000).toISOString().slice(0, 10);
-  return points.filter((p) => p.date >= from);
-}
-
 function seg(name, options, current) {
   return `<div class="seg" data-seg="${name}">${options
     .map(([v, l]) => `<button type="button" data-v="${v}" class="${v === current ? "on" : ""}">${l}</button>`)
@@ -220,9 +239,10 @@ async function route() {
   closeSheet();
   const hash = location.hash.replace(/^#/, "") || "/";
   const [, page, arg] = hash.split("/");
-  window.scrollTo(0, 0);
+  if (page !== "methode") window.scrollTo(0, 0);
   try {
     if (page === "search") await renderSearch(token);
+    else if (page === "methode") await renderMethod(arg, token);
     else if (page === "stock" && arg) await renderStock(decodeURIComponent(arg), token);
     else await renderDashboard(token);
   } catch (e) {
@@ -304,8 +324,8 @@ async function renderDashboard(token) {
         <h2>Évolution</h2>
         ${seg("metric", [["value", "Valeur"], ["pnl", "Gain"]], state.dashMetric)}
       </div>
-      <div class="chart-box"><canvas id="evo"></canvas></div>
-      <div style="margin-top:10px">${seg("range", [["1m", "1M"], ["3m", "3M"], ["6m", "6M"], ["1y", "1A"], ["all", "Tout"]], state.dashRange)}</div>
+      <div class="chart-box"><canvas id="evo"></canvas><div class="chart-msg muted small" id="evo-msg" hidden></div></div>
+      <div style="margin-top:10px">${seg("period", [["1d", "1 jour"], ["1w", "1 semaine"], ["1m", "1 mois"]], state.dashPeriod)}</div>
     </section>
 
     ${open.length ? `<section class="card">
@@ -330,43 +350,67 @@ async function renderDashboard(token) {
       <ul class="list">${closed.map(positionRow).join("")}</ul></section>` : ""}
   `;
 
-  drawEvolution(p);
+  drawEvolution(token);
   if (open.length) doughnut($("#alloc"), p.allocation.map((a) => a.name), p.allocation.map((a) => a.value));
 
   view.querySelectorAll("[data-seg]").forEach((el) =>
     el.addEventListener("click", (e) => {
       const b = e.target.closest("button");
       if (!b) return;
-      if (el.dataset.seg === "range") state.dashRange = b.dataset.v;
+      if (el.dataset.seg === "period") state.dashPeriod = b.dataset.v;
       else state.dashMetric = b.dataset.v;
       el.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
-      drawEvolution(p);
+      drawEvolution(token);
     }),
   );
 }
 
 let evoChart = null;
-function drawEvolution(p) {
+const timelines = {}; // cache par période : { at, data }
+async function drawEvolution(token) {
+  const period = state.dashPeriod;
+  const metric = state.dashMetric;
+  const msg = $("#evo-msg");
+  let cached = timelines[period];
+  if (!cached || cached.at < state.lastLoad || Date.now() - cached.at > 120_000) {
+    msg.hidden = false;
+    msg.textContent = "Chargement…";
+    try {
+      cached = timelines[period] = { at: Date.now(), data: await api(`/api/timeline?period=${period}`) };
+    } catch (e) {
+      if (!stale(token)) msg.textContent = e.message;
+      return;
+    }
+  }
+  // L'utilisateur a pu changer de vue ou de période pendant le chargement.
+  if (stale(token) || period !== state.dashPeriod || metric !== state.dashMetric || !$("#evo")) return;
   if (evoChart) {
     evoChart.destroy();
     charts.delete(evoChart);
+    evoChart = null;
   }
-  const pts = sliceRange(p.timeline, state.dashRange);
-  const labels = pts.map((x) => x.date);
+  const pts = cached.data.points;
+  if (pts.length < 2) {
+    msg.hidden = false;
+    msg.textContent = "Pas encore assez de données sur cette période.";
+    return;
+  }
+  msg.hidden = true;
+  const labels = pts.map((x) => x.t);
   const accent = cssVar("--accent");
   const muted = cssVar("--muted");
   let datasets;
-  if (state.dashMetric === "value") {
+  if (metric === "value") {
     datasets = [
       { label: "Valeur", data: pts.map((x) => x.value), borderColor: accent, backgroundColor: accent + "22", fill: true },
       { label: "Investi", data: pts.map((x) => x.invested), borderColor: muted, borderDash: [5, 4], borderWidth: 1.5, stepped: true },
     ];
   } else {
-    const last = pts.length ? pts[pts.length - 1].pnl : 0;
+    const last = pts[pts.length - 1].pnl;
     const col = last >= 0 ? cssVar("--up") : cssVar("--down");
     datasets = [{ label: "Gain cumulé", data: pts.map((x) => x.pnl), borderColor: col, backgroundColor: col + "22", fill: "origin" }];
   }
-  evoChart = lineChart($("#evo"), labels, datasets);
+  evoChart = lineChart($("#evo"), labels, datasets, { intraday: period !== "1m" });
 }
 
 function positionRow(x) {
@@ -437,6 +481,25 @@ async function renderSearch(token) {
   setTimeout(() => input.focus(), 50);
 }
 
+// ---------- Méthode ----------
+
+async function renderMethod(section, token) {
+  setHeader("Méthode de calcul");
+  setTab("methode");
+  if (!view.querySelector(".doc")) {
+    view.innerHTML = skeleton();
+    const cfg = await getConfig();
+    if (stale(token)) return;
+    view.innerHTML = methodHtml(cfg);
+  }
+  view.querySelectorAll(".toc a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#/methode/${section}`));
+  const target = section && SECTIONS.some(([id]) => id === section) ? document.getElementById(section) : null;
+  if (target) {
+    const top = target.getBoundingClientRect().top + window.scrollY - $(".topbar").offsetHeight - 8;
+    window.scrollTo({ top, behavior: "smooth" });
+  } else window.scrollTo(0, 0);
+}
+
 // ---------- Fiche action ----------
 
 async function renderStock(symbol, token) {
@@ -461,7 +524,7 @@ async function renderStock(symbol, token) {
       <span class="muted small">&nbsp;séance${q.marketTime ? " · " + new Date(q.marketTime * 1000).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</span>
       ${!isEur ? `<div class="muted small" style="margin-top:6px">≈ ${eur(q.price * q.fx)} au taux actuel</div>` : ""}
       <div class="chart-box small" style="margin-top:14px"><canvas id="pc"></canvas></div>
-      <div style="margin-top:10px">${seg("srange", [["1mo", "1M"], ["6mo", "6M"], ["1y", "1A"], ["5y", "5A"], ["max", "Max"]], state.stockRange)}</div>
+      <div style="margin-top:10px">${seg("srange", [["1d", "1J"], ["1w", "1S"], ["1mo", "1M"], ["1y", "1A"], ["5y", "5A"], ["max", "Max"]], state.stockRange)}</div>
     </section>
 
     ${lots.length ? `<section class="card"><h2>Mes positions</h2>${lots.map(lotBlock).join("")}</section>` : ""}
@@ -469,21 +532,21 @@ async function renderStock(symbol, token) {
     <section class="card">
       <h2>Simuler un achat</h2>
       <form id="buy" autocomplete="off">
+        <div class="field">${seg("mode", [["amount", "Montant en €"], ["quantity", "Nombre d'actions"]], "amount")}</div>
         <div class="grid2">
+          <label class="field"><span id="amt-label">Montant à investir (€)</span>
+            <input class="input" type="number" name="val" inputmode="decimal" min="0" step="any" placeholder="15" required></label>
           <label class="field"><span>Date d'achat</span>
             <input class="input" type="date" name="date" value="${today()}" max="${today()}" required></label>
-          <label class="field"><span>Frais de courtage (€)</span>
-            <input class="input" type="number" name="fees" inputmode="decimal" min="0" step="0.01" value="0"></label>
         </div>
-        <div class="field">${seg("mode", [["amount", "Montant en €"], ["quantity", "Nombre d'actions"]], "amount")}</div>
-        <label class="field"><span id="amt-label">Montant à investir (€)</span>
-          <input class="input" type="number" name="val" inputmode="decimal" min="0" step="any" placeholder="1000" required></label>
         <div class="estimate" id="est" hidden></div>
         <div class="error" id="buy-err" hidden></div>
         <button class="btn" type="submit" id="buy-btn" disabled>Simuler l'achat</button>
       </form>
-      <p class="muted small" style="margin:10px 2px 0">Date passée : cours de clôture de ce jour (ou du jour de bourse suivant). Aujourd'hui : dernier cours connu.
-      En mode montant, on achète un nombre entier d'actions.</p>
+      <p class="muted small" style="margin:10px 2px 0">Les fractions d'actions sont autorisées : tu peux investir 15 €.
+      Frais de courtage simulés : ${feeLabel() || "un pourcentage"} de chaque ordre (achat et vente), déjà inclus dans le montant.
+      Date passée : cours de clôture de ce jour (ou du jour de bourse suivant). Aujourd'hui : dernier cours connu.
+      <a href="#/methode/prix">Comment c'est calculé ?</a></p>
     </section>`;
 
   drawPrice(q);
@@ -515,9 +578,9 @@ function drawPrice(q) {
   const col = cssVar(up ? "--up" : "--down");
   priceChart = lineChart(
     $("#pc"),
-    pts.map((x) => x.date),
+    pts.map((x) => x.t),
     [{ label: "Cours", data: pts.map((x) => x.close), borderColor: col, backgroundColor: col + "1f", fill: true }],
-    { formatY: (v) => native(v, q.currency) },
+    { formatY: (v) => native(v, q.currency), intraday: q.intraday },
   );
 }
 
@@ -526,7 +589,7 @@ function lotBlock(x) {
   return `<div class="lot" data-id="${x.id}">
     <div class="top">
       <div>
-        <div><b>${qty(x.quantity)} action${x.quantity > 1 ? "s" : ""}</b> achetée${x.quantity > 1 ? "s" : ""} le ${date(x.buyDate)}</div>
+        <div><b>${qty(x.quantity)} action${x.quantity >= 2 ? "s" : ""}</b> achetée${x.quantity >= 2 ? "s" : ""} le ${date(x.buyDate)}</div>
         <div class="muted small">à ${native(x.buyPrice, x.currency)} · coût ${eur(x.cost)}${x.buyFees ? ` (dont ${eur(x.buyFees)} de frais)` : ""}</div>
         ${closed ? `<div class="muted small">vendue le ${date(x.sellDate)} à ${native(x.sellPrice, x.currency)}${x.sellFees ? ` · frais ${eur(x.sellFees)}` : ""}</div>` : ""}
       </div>
@@ -585,7 +648,6 @@ function bindBuyForm(q) {
     return {
       symbol: q.symbol,
       date: form.date.value || today(),
-      fees: parseFloat(String(form.fees.value).replace(",", ".")) || 0,
       mode,
       amount: mode === "amount" ? v : undefined,
       quantity: mode === "quantity" ? v : undefined,
@@ -609,9 +671,10 @@ function bindBuyForm(q) {
       est.innerHTML = `
         <div class="line"><span class="muted">Cours retenu (${date(e.date)})</span><span>${native(e.price, e.currency)}</span></div>
         ${e.currency !== "EUR" ? `<div class="line"><span class="muted">Taux de change</span><span>1 ${esc(e.currency)} = ${numFmt(4).format(e.fx)} €</span></div>` : ""}
-        <div class="line"><span class="muted">Quantité</span><span>${qty(e.quantity)}</span></div>
-        ${e.fees ? `<div class="line"><span class="muted">Frais</span><span>${eur(e.fees)}</span></div>` : ""}
-        <div class="line total"><span>Total investi</span><span>${eur(e.total)}</span></div>`;
+        <div class="line"><span class="muted">Quantité</span><span>${qty(e.quantity)} action${e.quantity >= 2 ? "s" : ""}</span></div>
+        <div class="line"><span class="muted">Montant investi en actions</span><span>${eur(e.invested)}</span></div>
+        <div class="line"><span>${feeLink()}</span><span>${eur(e.fees)}</span></div>
+        <div class="line total"><span>Total débité</span><span>${eur(e.total)}</span></div>`;
       btn.disabled = false;
     } catch (ex) {
       if (my !== seq) return;
@@ -634,8 +697,7 @@ function bindBuyForm(q) {
     mode = b.dataset.v;
     e.currentTarget.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
     $("#amt-label").textContent = mode === "amount" ? "Montant à investir (€)" : "Nombre d'actions";
-    form.val.placeholder = mode === "amount" ? "1000" : "10";
-    form.val.step = mode === "amount" ? "any" : "1";
+    form.val.placeholder = mode === "amount" ? "15" : "0,5";
     schedule();
   });
 
@@ -669,12 +731,8 @@ function openSellSheet(lot) {
   $("#sheet-body").innerHTML = `
     <h3>Vendre ${qty(lot.quantity)} × ${esc(lot.name)}</h3>
     <form id="sell" autocomplete="off">
-      <div class="grid2">
-        <label class="field"><span>Date de vente</span>
-          <input class="input" type="date" name="date" value="${today()}" min="${lot.buyDate}" max="${today()}" required></label>
-        <label class="field"><span>Frais (€)</span>
-          <input class="input" type="number" name="fees" inputmode="decimal" min="0" step="0.01" value="0"></label>
-      </div>
+      <label class="field"><span>Date de vente</span>
+        <input class="input" type="date" name="date" value="${today()}" min="${lot.buyDate}" max="${today()}" required></label>
       <div class="estimate" id="sell-est"><span class="muted">Calcul…</span></div>
       <div class="error" id="sell-err" hidden></div>
       <div class="grid2">
@@ -690,7 +748,7 @@ function openSellSheet(lot) {
   $("#sell-cancel").onclick = closeSheet;
   let seq = 0;
   let timer;
-  const body = () => ({ action: "sell", date: form.date.value, fees: parseFloat(String(form.fees.value).replace(",", ".")) || 0 });
+  const body = () => ({ action: "sell", date: form.date.value });
   const preview = async () => {
     const my = ++seq;
     err.hidden = true;
@@ -699,7 +757,9 @@ function openSellSheet(lot) {
       if (my !== seq) return;
       est.innerHTML = `
         <div class="line"><span class="muted">Cours retenu (${date(e.date)})</span><span>${native(e.price, lot.currency)}</span></div>
-        <div class="line"><span class="muted">Produit de la vente</span><span>${eur(e.proceeds)}</span></div>
+        <div class="line"><span class="muted">Montant de la vente</span><span>${eur(e.gross)}</span></div>
+        <div class="line"><span>${feeLink()}</span><span>−${eur(e.fees)}</span></div>
+        <div class="line"><span class="muted">Tu récupères</span><span>${eur(e.proceeds)}</span></div>
         <div class="line total"><span>Plus-value</span><span class="${tone(e.pnl)}">${signedEur(e.pnl)}</span></div>`;
       btn.disabled = false;
     } catch (ex) {
@@ -748,6 +808,10 @@ function toast(msg) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => (el.hidden = true), 2800);
 }
+
+getConfig()
+  .then((c) => (state.config = c))
+  .catch(() => {});
 
 // Accès non protégé : avertissement et bouton de déconnexion masqué.
 api("/api/session")

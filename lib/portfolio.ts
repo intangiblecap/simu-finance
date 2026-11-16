@@ -1,15 +1,17 @@
 import {
   Chart,
   FxSeries,
+  Period,
   PricePoint,
-  Range,
+  SeriesPoint,
   fxAt,
   getChart,
   getFx,
+  getFxSeries,
+  getSeries,
   rangeCovering,
   round,
-  valueAt,
-  widestRange,
+  seriesAt,
 } from "./yahoo";
 import { HttpError, todayParis } from "./http";
 
@@ -96,9 +98,9 @@ export interface PositionView {
 }
 
 export interface TimelinePoint {
-  date: string;
-  value: number; // valeur des positions détenues ce jour-là
-  invested: number; // coût des positions détenues ce jour-là
+  t: number; // timestamp (s)
+  value: number; // valeur des positions détenues à cet instant
+  invested: number; // coût des positions détenues à cet instant
   pnl: number; // plus-value latente + plus-values réalisées
 }
 
@@ -118,19 +120,13 @@ export interface Portfolio {
   };
   positions: PositionView[];
   allocation: { symbol: string; name: string; value: number; weight: number }[];
-  timeline: TimelinePoint[];
   errors: { symbol: string; error: string }[];
 }
 
 export async function computePortfolio(rows: PositionRow[]): Promise<Portfolio> {
-  // Plage de données nécessaire par instrument et par devise.
-  const symRange = new Map<string, Range>();
-  const curRange = new Map<string, Range>();
-  for (const r of rows) {
-    const rg = rangeCovering(r.buy_date);
-    symRange.set(r.symbol, widestRange(symRange.get(r.symbol) ?? "5d", rg));
-    curRange.set(r.currency, widestRange(curRange.get(r.currency) ?? "5d", rg));
-  }
+  // Seuls les cours récents sont nécessaires (dernier cours + clôture de la veille).
+  const symRange = new Map<string, "5d">(rows.map((r) => [r.symbol, "5d"]));
+  const curRange = new Map<string, "5d">(rows.map((r) => [r.currency, "5d"]));
 
   const errors: { symbol: string; error: string }[] = [];
   const charts = new Map<string, Chart>();
@@ -248,38 +244,82 @@ export async function computePortfolio(rows: PositionRow[]): Promise<Portfolio> 
     },
     positions,
     allocation,
-    timeline: buildTimeline(rows, charts, fxs),
     errors,
   };
 }
 
-function buildTimeline(rows: PositionRow[], charts: Map<string, Chart>, fxs: Map<string, FxSeries>): TimelinePoint[] {
-  if (!rows.length) return [];
-  const start = rows.reduce((m, r) => (r.buy_date < m ? r.buy_date : m), rows[0].buy_date);
-  const dates = new Set<string>();
-  for (const c of charts.values()) for (const p of c.points) if (p.date >= start) dates.add(p.date);
-  const sorted = [...dates].sort();
+// ---------- Évolution du portefeuille sur 1 jour / 1 semaine / 1 mois ----------
 
-  return sorted.map((d) => {
+function createdTs(r: PositionRow): number {
+  const t = Date.parse(r.created_at.replace(" ", "T") + "Z");
+  return Number.isFinite(t) ? t / 1000 : Infinity;
+}
+
+// Instant du dernier point de la série à la date `d` (ou avant) : moment où l'ordre
+// passé ce jour-là est considéré exécuté (clôture). -Infinity si `d` précède la série.
+function closeTsOf(points: SeriesPoint[], d: string): number {
+  let ts = -Infinity;
+  for (const p of points) {
+    if (p.date <= d) ts = p.t;
+    else break;
+  }
+  return ts;
+}
+
+export async function computeTimeline(rows: PositionRow[], period: Period) {
+  const series = new Map<string, SeriesPoint[]>();
+  const fxs = new Map<string, { points: SeriesPoint[]; current: number }>();
+  await Promise.all([
+    ...[...new Set(rows.map((r) => r.symbol))].map(async (s) => {
+      try {
+        series.set(s, (await getSeries(s, period)).points);
+      } catch {
+        /* instrument indisponible : ignoré dans le graphique */
+      }
+    }),
+    ...[...new Set(rows.map((r) => r.currency))].map(async (c) => {
+      try {
+        fxs.set(c, await getFxSeries(c, period));
+      } catch {
+        /* repli sur le taux d'achat */
+      }
+    }),
+  ]);
+
+  // Instants d'entrée / de sortie de chaque position sur l'axe du temps.
+  const lots = rows.map((r) => {
+    const pts = series.get(r.symbol) ?? [];
+    // Achat "aujourd'hui" : à l'heure de saisie ; achat passé : à la clôture du jour d'achat.
+    const buyT = Math.min(closeTsOf(pts, r.buy_date), createdTs(r));
+    const sellT = r.sell_date ? closeTsOf(pts, r.sell_date) : Infinity;
+    const cost = positionCost(r);
+    const realized =
+      r.sell_date && r.sell_price != null ? r.quantity * r.sell_price * (r.sell_fx ?? 1) - r.sell_fees - cost : 0;
+    return { r, pts, buyT, sellT, cost, realized };
+  });
+
+  const xs = [...new Set([...series.values()].flatMap((p) => p.map((x) => x.t)))].sort((a, b) => a - b);
+  const points: TimelinePoint[] = xs.map((t) => {
     let value = 0;
     let invested = 0;
     let realized = 0;
-    for (const r of rows) {
-      if (r.buy_date > d) continue;
-      const cost = positionCost(r);
-      if (r.sell_date && r.sell_date <= d && r.sell_price != null) {
-        realized += r.quantity * r.sell_price * (r.sell_fx ?? 1) - r.sell_fees - cost;
+    for (const l of lots) {
+      if (t < l.buyT) continue;
+      if (t >= l.sellT) {
+        realized += l.realized;
         continue;
       }
-      const chart = charts.get(r.symbol);
-      const fx = fxs.get(r.currency);
-      const close = chart ? valueAt(chart.points, d) : null;
-      const rate = fx ? fxAt(fx, d) : r.buy_fx;
-      value += r.quantity * (close ?? r.buy_price) * rate;
-      invested += cost;
+      const close = seriesAt(l.pts, t) ?? l.r.buy_price;
+      const fx = fxs.get(l.r.currency);
+      const rate = fx ? (fx.points.length ? seriesAt(fx.points, t) ?? fx.current : fx.current) : l.r.buy_fx;
+      value += l.r.quantity * close * rate;
+      invested += l.cost;
     }
-    return { date: d, value: round(value), invested: round(invested), pnl: round(value - invested + realized) };
+    return { t, value: round(value), invested: round(invested), pnl: round(value - invested + realized) };
   });
+  // On démarre le graphique au premier instant où une position est détenue.
+  const first = points.findIndex((p) => p.invested > 0 || p.pnl !== 0);
+  return { period, points: first < 0 ? [] : points.slice(first) };
 }
 
 function sum(xs: number[]): number {
