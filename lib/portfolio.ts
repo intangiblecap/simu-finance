@@ -27,6 +27,7 @@ export interface PositionRow {
   buy_price: number;
   buy_fx: number;
   buy_fees: number;
+  portfolio_id?: number;
   sell_date: string | null;
   sell_price: number | null;
   sell_fx: number | null;
@@ -115,6 +116,10 @@ export interface Portfolio {
     totalPnlPct: number;
     dayChange: number;
     dayChangePct: number;
+    // Bilan sur toute la vie du portefeuille
+    totalInvested: number; // somme de tous les achats, frais compris
+    proceeds: number; // montants récupérés par les ventes, nets de frais
+    feesPaid: number; // frais d'achat et de vente payés
     openCount: number;
     closedCount: number;
   };
@@ -239,6 +244,9 @@ export async function computePortfolio(rows: PositionRow[]): Promise<Portfolio> 
       totalPnlPct: totalCost ? round(((unrealizedPnl + realizedPnl) / totalCost) * 100) : 0,
       dayChange: round(dayChange),
       dayChangePct: value - dayChange ? round((dayChange / (value - dayChange)) * 100) : 0,
+      totalInvested: round(totalCost),
+      proceeds: round(sum(closed.map((p) => p.value))),
+      feesPaid: round(sum(rows.map((r) => r.buy_fees + (r.sell_date ? r.sell_fees : 0)))),
       openCount: open.length,
       closedCount: closed.length,
     },

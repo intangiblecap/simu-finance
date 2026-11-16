@@ -66,7 +66,11 @@ const initials = (name) => {
 async function api(path, opts = {}) {
   const res = await fetch(path, {
     ...opts,
-    headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+    headers: {
+      "Content-Type": "application/json",
+      ...(state.portfolioId ? { "X-Portfolio-Id": String(state.portfolioId) } : {}),
+      ...(opts.headers || {}),
+    },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   if (res.status === 401) {
@@ -96,6 +100,13 @@ const state = {
   stockRange: "1y",
   protected: true,
   config: null,
+  portfolioId: (() => {
+    try {
+      return Number(localStorage.getItem("portfolioId")) || null;
+    } catch {
+      return null;
+    }
+  })(),
 };
 
 // Paramètres de simulation (taux de frais…), servis par /api/config.
@@ -227,10 +238,167 @@ function seg(name, options, current) {
 
 // ---------- Navigation ----------
 
-function setHeader(title, { back = false } = {}) {
-  $("#title").textContent = title;
+function setHeader(title, { back = false, switcher = false } = {}) {
+  const h = $("#title");
+  if (switcher) {
+    const name = state.portfolio?.portfolio?.name ?? "Portefeuille";
+    h.innerHTML = `<button class="pf-switch" id="pf-switch" aria-label="Changer de portefeuille">
+      <span class="pf-name">${esc(name)}</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>`;
+    $("#pf-switch").onclick = openPortfolioSheet;
+    document.title = `${name} · Simu Finance`;
+  } else {
+    h.textContent = title;
+    document.title = `${title} · Simu Finance`;
+  }
   $("#back").hidden = !back;
-  document.title = title === "Portefeuille" ? "Simu Finance" : `${title} · Simu Finance`;
+}
+
+// ---------- Portefeuilles ----------
+
+function resetPortfolioCaches() {
+  state.portfolio = null;
+  state.lastLoad = 0;
+  state.compare = null;
+  state.wbDate = null;
+  for (const k of Object.keys(timelines)) delete timelines[k];
+}
+
+function switchPortfolio(id) {
+  state.portfolioId = id;
+  try {
+    localStorage.setItem("portfolioId", String(id));
+  } catch {}
+  resetPortfolioCaches();
+}
+
+const yearsAgo = (n) => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - n);
+  return new Intl.DateTimeFormat("en-CA", TZ).format(d);
+};
+
+async function openPortfolioSheet() {
+  $("#sheet-body").innerHTML = `<h3>Mes portefeuilles</h3><div class="skeleton" style="height:120px"></div>`;
+  sheet.showModal();
+  let list;
+  try {
+    ({ portfolios: list } = await api("/api/portfolios"));
+  } catch (e) {
+    $("#sheet-body").innerHTML = `<h3>Mes portefeuilles</h3><div class="error">${esc(e.message)}</div>`;
+    return;
+  }
+  const currentId = state.portfolio?.portfolio?.id ?? state.portfolioId ?? list[0]?.id;
+  $("#sheet-body").innerHTML = `
+    <h3>Mes portefeuilles</h3>
+    <ul class="list pf-list">${list
+      .map(
+        (p) => `<li><button class="row" data-id="${p.id}">
+          <span class="radio ${p.id === currentId ? "on" : ""}"></span>
+          <div class="main"><div class="title">${esc(p.name)}</div>
+            <div class="sub">Depuis le ${date(p.startDate)} · ${p.positions} position${p.positions > 1 ? "s" : ""}</div></div>
+        </button></li>`,
+      )
+      .join("")}</ul>
+    <div class="pf-actions">
+      <button class="btn sm secondary" id="pf-rename">Renommer</button>
+      ${list.length > 1 ? `<button class="btn sm ghost" id="pf-delete">Supprimer</button>` : ""}
+    </div>
+    <button class="btn" id="pf-new" style="margin-top:14px">+ Nouveau portefeuille</button>`;
+  const current = list.find((p) => p.id === currentId);
+  $("#sheet-body").querySelectorAll(".pf-list [data-id]").forEach((b) =>
+    b.addEventListener("click", () => {
+      closeSheet();
+      if (Number(b.dataset.id) !== currentId) {
+        switchPortfolio(Number(b.dataset.id));
+        if (location.hash === "#/" || location.hash === "" || location.hash === "#/compare") route();
+        else location.hash = "#/";
+      }
+    }),
+  );
+  $("#pf-rename").onclick = async () => {
+    const name = prompt("Nouveau nom du portefeuille", current?.name ?? "");
+    if (!name) return;
+    try {
+      await api(`/api/portfolios/${currentId}`, { method: "PATCH", body: { name } });
+      closeSheet();
+      resetPortfolioCaches();
+      route();
+    } catch (e) {
+      toast(e.message);
+    }
+  };
+  const del = $("#pf-delete");
+  if (del)
+    del.onclick = async () => {
+      if (!confirm(`Supprimer le portefeuille « ${current?.name} » et toutes ses positions ? Cette action est définitive.`)) return;
+      try {
+        await api(`/api/portfolios/${currentId}`, { method: "DELETE" });
+        closeSheet();
+        switchPortfolio(list.find((p) => p.id !== currentId).id);
+        toast("Portefeuille supprimé");
+        location.hash = "#/";
+        route();
+      } catch (e) {
+        toast(e.message);
+      }
+    };
+  $("#pf-new").onclick = openNewPortfolioForm;
+}
+
+function openNewPortfolioForm() {
+  const quick = [
+    ["Aujourd'hui", today()],
+    ["Il y a 1 an", yearsAgo(1)],
+    ["Il y a 5 ans", yearsAgo(5)],
+    ["Il y a 10 ans", yearsAgo(10)],
+  ];
+  $("#sheet-body").innerHTML = `
+    <h3>Nouveau portefeuille</h3>
+    <form id="pf-form" autocomplete="off">
+      <label class="field"><span>Nom</span>
+        <input class="input" name="name" maxlength="40" placeholder="Ex : Mon PEA, Test luxe, Si j'avais commencé en 2015…" required></label>
+      <div class="field"><span class="muted small" style="display:block;margin-bottom:4px">Date de démarrage</span>
+        <div class="chips quick" id="pf-quick">${quick.map(([l, d]) => `<button type="button" class="chip ${d === today() ? "on" : ""}" data-d="${d}">${l}</button>`).join("")}</div>
+        <input class="input" type="date" name="start" value="${today()}" max="${today()}" min="1990-01-01" style="margin-top:8px" required>
+        <p class="muted small" style="margin:6px 0 0">Aucun achat ne pourra être fait avant cette date. Avec une date passée, tu pourras ensuite indiquer ce que tu aurais investi ce jour-là.</p>
+      </div>
+      <div class="error" id="pf-err" hidden></div>
+      <div class="grid2">
+        <button class="btn secondary" type="button" id="pf-cancel">Annuler</button>
+        <button class="btn" type="submit">Créer</button>
+      </div>
+    </form>`;
+  const form = $("#pf-form");
+  $("#pf-cancel").onclick = closeSheet;
+  $("#pf-quick").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-d]");
+    if (!b) return;
+    form.start.value = b.dataset.d;
+    $("#pf-quick").querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c === b));
+  });
+  form.start.addEventListener("input", () => $("#pf-quick").querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c.dataset.d === form.start.value)));
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const p = await api("/api/portfolios", { method: "POST", body: { name: form.name.value, startDate: form.start.value } });
+      closeSheet();
+      switchPortfolio(p.id);
+      toast(`Portefeuille « ${p.name} » créé`);
+      if (p.startDate < today()) {
+        // Démarrage dans le passé : on ouvre directement « Remonter le temps » à cette date.
+        state.wbDate = p.startDate;
+        location.hash = "#/wayback";
+      } else {
+        location.hash = "#/";
+      }
+      route();
+    } catch (ex) {
+      $("#pf-err").textContent = ex.message;
+      $("#pf-err").hidden = false;
+    }
+  });
+  setTimeout(() => form.name.focus(), 50);
 }
 function setTab(tab) {
   document.querySelectorAll(".tabbar a").forEach((a) => a.classList.toggle("active", a.dataset.tab === tab));
@@ -292,11 +460,13 @@ function skeleton() {
 }
 
 async function renderDashboard(token) {
-  setHeader("Portefeuille");
+  setHeader("Portefeuille", { switcher: true });
   setTab("home");
   if (!state.portfolio) view.innerHTML = skeleton();
   const p = await loadPortfolio();
   if (stale(token)) return;
+  setHeader("Portefeuille", { switcher: true });
+  if (p.portfolio && p.portfolio.id !== state.portfolioId) state.portfolioId = p.portfolio.id;
 
   if (!p.positions.length) {
     view.innerHTML = `<div class="card empty">
@@ -315,15 +485,18 @@ async function renderDashboard(token) {
     ${state.protected ? "" : `<div class="banner">Accès non protégé : n'importe qui avec l'URL peut voir et modifier ce portefeuille. Ajoute le secret <b>APP_PASSWORD</b> dans Cloudflare pour activer le mot de passe.</div>`}
     ${p.errors.length ? `<div class="banner">Données indisponibles pour : ${p.errors.map((e) => esc(e.symbol)).join(", ")}. Les valeurs affichées peuvent être incomplètes.</div>` : ""}
     <section class="card hero">
-      <div class="label">Valeur du portefeuille</div>
-      <div class="big">${eur(s.value)}</div>
-      <div><span class="pill ${tone(s.totalPnl)}">${signedEur(s.totalPnl)} · ${pct(s.totalPnlPct)}</span>
-        <span class="muted small">&nbsp;depuis le début</span></div>
-      <div class="stats">
-        <div class="stat"><div class="k">Aujourd'hui</div><div class="v ${tone(s.dayChange)}">${signedEur(s.dayChange)} <span class="small">${pct(s.dayChangePct)}</span></div></div>
-        <div class="stat"><div class="k">Investi (positions ouvertes)</div><div class="v">${eur(s.invested)}</div></div>
-        <div class="stat"><div class="k">Plus-value latente</div><div class="v ${tone(s.unrealizedPnl)}">${signedEur(s.unrealizedPnl)}</div></div>
-        <div class="stat"><div class="k">Plus-value réalisée</div><div class="v ${tone(s.realizedPnl)}">${signedEur(s.realizedPnl)}</div></div>
+      <div class="label">Gain total depuis le ${date(p.portfolio?.startDate)}</div>
+      <div class="big ${tone(s.totalPnl)}">${signedEur(s.totalPnl)}</div>
+      <div><span class="pill ${tone(s.totalPnlPct)}">${pct(s.totalPnlPct)}</span>
+        <span class="muted small">&nbsp;de tout l'argent investi</span></div>
+      <div class="muted small" style="margin-top:6px">Aujourd'hui : <span class="${tone(s.dayChange)}">${signedEur(s.dayChange)} (${pct(s.dayChangePct)})</span></div>
+      <div class="ledger">
+        <div class="line"><span>Valeur actuelle des positions</span><span>${eur(s.value)}</span></div>
+        <div class="line"><span>+ Récupéré par les ventes</span><span>${eur(s.proceeds)}</span></div>
+        <div class="line"><span>− Total investi <span class="muted small">(tous les achats, frais compris)</span></span><span>${eur(s.totalInvested)}</span></div>
+        <div class="line total"><span>= Gain total</span><span class="${tone(s.totalPnl)}">${signedEur(s.totalPnl)}</span></div>
+        <div class="muted small" style="margin-top:6px">dont latent ${signedEur(s.unrealizedPnl)} · réalisé ${signedEur(s.realizedPnl)} · frais payés ${eur(s.feesPaid)} ·
+          <a href="#/methode/gains">détail du calcul</a></div>
       </div>
     </section>
 
@@ -430,8 +603,11 @@ async function drawEvolution(token) {
 
 let benchChart = null;
 async function renderCompare(token) {
-  setHeader("Comparer");
+  setHeader("Comparer", { switcher: true });
   setTab("compare");
+  loadPortfolio()
+    .then(() => !stale(token) && setHeader("Comparer", { switcher: true }))
+    .catch(() => {});
   view.innerHTML = skeleton();
   if (!state.compare || state.compare.at < state.lastLoad || Date.now() - state.compare.at > 300_000) {
     state.compare = { at: Date.now(), data: await api("/api/benchmark") };
@@ -551,15 +727,20 @@ function monthsAgo(n) {
 async function renderWayback(token) {
   setHeader("Remonter le temps", { back: true });
   setTab("");
-  state.wbDate ??= monthsAgo(12);
+  const pfInfo = (await loadPortfolio().catch(() => null))?.portfolio;
+  if (stale(token)) return;
+  const startDate = pfInfo?.startDate ?? "1990-01-01";
+  state.wbDate ??= monthsAgo(12) < startDate ? startDate : monthsAgo(12);
   view.classList.add("has-action");
   view.innerHTML = `
     <section class="card">
       <p style="margin:0 0 12px">Choisis une date dans le passé, puis indique <b>combien tu aurais investi ce jour-là</b> dans chaque action.
         L'app calcule ce que ça vaudrait aujourd'hui.</p>
-      <div class="chips quick" id="wb-quick">${WAYBACK_QUICK.map(([l, n]) => `<button type="button" class="chip" data-n="${n}">Il y a ${l}</button>`).join("")}</div>
-      <label class="field" style="margin:10px 0 0"><span>Date</span>
-        <input class="input" type="date" id="wb-date" value="${state.wbDate}" max="${today()}"></label>
+      <div class="chips quick" id="wb-quick">
+        <button type="button" class="chip" data-start="1">Démarrage (${date(startDate)})</button>
+        ${WAYBACK_QUICK.filter(([, n]) => monthsAgo(n) >= startDate).map(([l, n]) => `<button type="button" class="chip" data-n="${n}">Il y a ${l}</button>`).join("")}</div>
+      <label class="field" style="margin:10px 0 0"><span>Date (portefeuille « ${esc(pfInfo?.name ?? "")} »)</span>
+        <input class="input" type="date" id="wb-date" value="${state.wbDate}" min="${startDate}" max="${today()}"></label>
     </section>
     <section class="card" id="wb-lines"><div class="skeleton" style="height:140px"></div></section>
     <div class="action-bar"><button class="btn" id="wb-apply" disabled>Appliquer au portefeuille</button></div>`;
@@ -704,9 +885,9 @@ async function renderWayback(token) {
   };
 
   $("#wb-quick").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-n]");
+    const b = e.target.closest("[data-n],[data-start]");
     if (!b) return;
-    state.wbDate = monthsAgo(Number(b.dataset.n));
+    state.wbDate = b.dataset.start ? startDate : monthsAgo(Number(b.dataset.n));
     $("#wb-date").value = state.wbDate;
     load();
   });
@@ -1109,7 +1290,8 @@ function openBuySheet(q) {
   const quick = [15, 50, 100, 500, 1000];
   $("#sheet-body").innerHTML = `
     <h3>Simuler un achat</h3>
-    <div class="muted small" style="margin:-8px 0 14px">${esc(q.name)} · cours actuel ${native(q.price, q.currency)}</div>
+    <div class="muted small" style="margin:-8px 0 14px">${esc(q.name)} · cours actuel ${native(q.price, q.currency)}<br>
+      Dans le portefeuille <b>${esc(state.portfolio?.portfolio?.name ?? "")}</b></div>
     <form id="buy" autocomplete="off">
       <div class="step"><div class="step-title"><span class="step-n">1</span> Combien ?</div>
         ${seg("mode", [["amount", "En euros"], ["quantity", "En nombre d'actions"]], "amount")}
@@ -1118,7 +1300,7 @@ function openBuySheet(q) {
       </div>
       <div class="step"><div class="step-title"><span class="step-n">2</span> Quand ?</div>
         ${seg("when", [["today", "Aujourd'hui"], ["past", "À une date passée"]], "today")}
-        <input class="input" type="date" name="date" value="${today()}" max="${today()}" hidden>
+        <input class="input" type="date" name="date" value="${today()}" min="${state.portfolio?.portfolio?.startDate ?? ""}" max="${today()}" hidden>
         <div class="muted small" id="when-help" style="margin-top:6px">Au dernier cours connu.</div>
       </div>
       <div class="estimate" id="est" hidden></div>

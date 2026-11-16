@@ -1,6 +1,7 @@
 import type { Env } from "../../../lib/env";
 import { HttpError, errorResponse, isIsoDate, json, readJson, todayParis } from "../../../lib/http";
 import { executionAt, loadMarket } from "../../../lib/portfolio";
+import { currentPortfolio } from "../../../lib/scope";
 import { MIN_ORDER_EUR, floorQty, netFromBudget, orderFees } from "../../../lib/fees";
 import { EUROPEAN_EXCHANGES, exchangeSuffix, isEuropean, round } from "../../../lib/yahoo";
 
@@ -21,6 +22,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (!isEuropean(symbol)) throw new HttpError(400, "Instrument non supporté");
     const date = body.date ?? todayParis();
     if (!isIsoDate(date)) throw new HttpError(400, "Date invalide");
+    const pf = await currentPortfolio(env, request);
+    if (date < pf.start_date) {
+      throw new HttpError(400, `Le portefeuille « ${pf.name} » démarre le ${pf.start_date} : choisis une date à partir de celle-ci`);
+    }
 
     const { chart, fx } = await loadMarket(symbol, null, date);
     if (chart.instrumentType && chart.instrumentType !== "EQUITY") {
@@ -61,10 +66,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (dryRun) return json({ estimate });
 
     const row = await env.DB.prepare(
-      `INSERT INTO positions (instrument_type, symbol, name, exchange, currency, quantity, buy_date, buy_price, buy_fx, buy_fees)
-       VALUES ('stock', ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      `INSERT INTO positions (portfolio_id, instrument_type, symbol, name, exchange, currency, quantity, buy_date, buy_price, buy_fx, buy_fees)
+       VALUES (?, 'stock', ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     )
       .bind(
+        pf.id,
         chart.symbol,
         chart.name,
         EUROPEAN_EXCHANGES[exchangeSuffix(symbol)!] ?? chart.exchange,

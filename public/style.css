@@ -315,3 +315,24 @@ dialog.sheet { max-height: 92vh; overflow-y: auto; }
 .wb-amount input { width: 96px; text-align: right; font-weight: 600; }
 .wb-preview { margin-top: 4px; }
 .wb-preview:empty { display: none; }
+
+/* ---------- Sélecteur de portefeuille ---------- */
+.pf-switch {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  border: 0; background: var(--surface-2); color: var(--text); border-radius: 10px;
+  padding: 6px 10px; font: inherit; font-weight: 700; font-size: 16px; cursor: pointer;
+}
+.pf-switch .pf-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-switch svg { flex-shrink: 0; color: var(--muted); }
+.pf-list .row { padding: 12px 0; }
+.radio { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border); flex-shrink: 0; }
+.radio.on { border: 6px solid var(--accent); }
+.pf-actions { display: flex; gap: 8px; margin-top: 10px; }
+.chips.quick .chip.on { background: var(--accent); color: var(--accent-text); }
+
+/* ---------- Bilan du tableau de bord ---------- */
+.hero .big.up, .hero .big.down { font-size: 32px; }
+.ledger { margin-top: 14px; background: var(--surface-2); border-radius: 10px; padding: 12px; font-size: 14px; }
+.ledger .line { display: flex; justify-content: space-between; gap: 8px; }
+.ledger .line + .line { margin-top: 5px; }
+.ledger .total { font-weight: 700; font-size: 15px; border-top: 1px solid var(--border); padding-top: 6px; margin-top: 6px; }

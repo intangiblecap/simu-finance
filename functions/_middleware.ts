@@ -1,5 +1,6 @@
 import { isValidSession } from "../lib/auth";
 import { Env, authEnabled, sessionSecret } from "../lib/env";
+import { ensureSchema } from "../lib/schema";
 import { configureYahoo } from "../lib/yahoo";
 
 // Chemins accessibles sans être connecté.
@@ -18,6 +19,7 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   const url = new URL(request.url);
   configureYahoo(env.YAHOO_RELAY);
   const isApi = url.pathname.startsWith("/api/");
+  if (isApi) await ensureSchema(env.DB);
 
   // Sans APP_PASSWORD : accès libre (l'interface affiche un avertissement).
   if (!authEnabled(env)) {
