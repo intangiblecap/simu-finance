@@ -11,6 +11,7 @@
   --down: #c8312b;
   --up-bg: #e3f5ed;
   --down-bg: #fbe9e8;
+  --bench: #d97706;
   --shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
   --radius: 14px;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -31,6 +32,7 @@
     --down: #ff6b61;
     --up-bg: rgba(63, 185, 132, 0.14);
     --down-bg: rgba(255, 107, 97, 0.14);
+    --bench: #f0a03c;
     --shadow: none;
     color-scheme: dark;
   }
@@ -197,7 +199,7 @@ dialog.sheet h3 { margin: 0 0 14px; font-size: 18px; }
 @media (min-width: 600px) { dialog.sheet { margin: auto; border-radius: 18px; } }
 
 .toast {
-  position: fixed; left: 50%; bottom: calc(80px + var(--safe-bottom)); transform: translateX(-50%);
+  position: fixed; left: 50%; bottom: calc(140px + var(--safe-bottom)); transform: translateX(-50%);
   background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-size: 14px;
   z-index: 50; box-shadow: 0 4px 16px rgba(0,0,0,.2); max-width: calc(100% - 32px);
 }
@@ -249,3 +251,44 @@ dialog.sheet h3 { margin: 0 0 14px; font-size: 18px; }
 .row.top { align-items: flex-start; }
 .row .why { font-size: 13px; color: var(--muted); margin-top: 3px; line-height: 1.35; }
 .row.top .right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+
+/* ---------- Comparaison avec un indice ---------- */
+.bench-select { min-height: 40px; padding: 8px 32px 8px 12px; font-weight: 600;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%; background-size: 5px 5px; background-repeat: no-repeat; }
+.bench-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.verdict { margin: 12px 0; font-size: 15px; }
+
+/* ---------- Fiche action ---------- */
+.stock-id { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.stock-id h2 { margin: 0; font-size: 18px; line-height: 1.25; }
+.avatar.lg { width: 46px; height: 46px; border-radius: 12px; font-size: 14px; }
+.stock-head .big { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; }
+.change-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.minmax { margin-top: 10px; }
+.sub-h { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin: 16px 0 0; }
+.btn.ghost { background: transparent; color: var(--muted); }
+main.has-action { padding-bottom: calc(150px + var(--safe-bottom)); }
+.action-bar {
+  position: fixed; left: 0; right: 0; z-index: 9; bottom: calc(57px + var(--safe-bottom));
+  padding: 10px 16px; display: flex; justify-content: center;
+  background: linear-gradient(to top, var(--bg) 60%, transparent);
+}
+.action-bar .btn { max-width: 688px; box-shadow: 0 4px 14px rgba(31, 111, 235, .3); }
+
+/* ---------- Feuille d'achat guidée ---------- */
+dialog.sheet { max-height: 92vh; overflow-y: auto; }
+.step { margin-bottom: 16px; }
+.step-title { display: flex; align-items: center; gap: 8px; font-weight: 600; margin-bottom: 8px; }
+.step-n {
+  width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--accent-text);
+  font-size: 12px; display: inline-flex; align-items: center; justify-content: center;
+}
+.step .seg { margin-bottom: 8px; }
+.big-input { font-size: 22px; font-weight: 600; padding: 12px 14px; }
+.chips.quick { margin-top: 8px; }
+.chips.quick .chip { border: 0; cursor: pointer; font-size: 14px; font-weight: 600; padding: 7px 12px; color: var(--text); }
+.chips.quick .chip:active { background: var(--accent); color: var(--accent-text); }
+.step input[type="date"] { margin-top: 2px; }
+.seg-full .seg { display: grid; grid-template-columns: repeat(6, 1fr); width: 100%; }
+.seg-full .seg button { padding: 6px 2px; }

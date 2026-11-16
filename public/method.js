@@ -22,6 +22,7 @@ export const SECTIONS = [
   ["devises", "Devises"],
   ["gains", "Calcul des gains"],
   ["graphique", "Graphique d'évolution"],
+  ["indices", "Comparer à un indice"],
   ["decouvrir", "Tendances et actions à connaître"],
   ["limites", "Ce qui n'est pas simulé"],
 ];
@@ -158,6 +159,36 @@ export function methodHtml(cfg) {
       <li>Une position entre dans le graphique à l'<b>heure de saisie</b> pour un achat du jour, ou à la <b>clôture</b> du jour d'achat pour une date passée. Elle en sort à la clôture du jour de vente.</li>
       <li>Le graphique est limité à 1 mois pour rester lisible ; la fiche de chaque action montre l'historique jusqu'à plusieurs décennies.</li>
     </ul>
+  </section>
+
+  <section class="card doc" id="indices">
+    <h2>Comparer à un indice</h2>
+    <p>Un <b>indice</b> mesure l'évolution d'un panier d'actions représentatif d'un marché. Le comparer à ton portefeuille répond à la vraie question : <b>« mes choix d'actions ont-ils fait mieux que si j'avais simplement acheté tout le marché ? »</b> Aujourd'hui, on peut acheter un indice entier en une fois grâce aux <b>ETF</b> (fonds indiciels cotés), pour des frais très faibles. Si ton portefeuille fait moins bien que l'indice, un ETF aurait été plus rentable, avec moins d'efforts.</p>
+
+    <h3>Les références proposées</h3>
+    <table class="tbl">
+      <tr><th>Référence</th><th>Ce qu'elle représente</th></tr>
+      ${cfg.benchmarks.map((b) => `<tr><td><b>${b.name}</b>${b.id === cfg.defaultBenchmark ? "<br><span class=\"muted small\">par défaut</span>" : ""}</td><td>${b.description}</td></tr>`).join("")}
+    </table>
+    <ul>
+      <li><b>Pourquoi le STOXX Europe 600 par défaut ?</b> Une référence doit ressembler à ce dans quoi tu investis. Tu achètes des actions européennes : l'indice le plus large du marché européen est la comparaison la plus juste. Le CAC 40 convient si tu n'achètes que des actions françaises.</li>
+      <li><b>Le S&amp;P 500</b> est la référence mondiale des marchés actions. Il est coté en dollars : on le convertit en euros, donc la comparaison inclut l'effet de change (comme pour un Européen qui achèterait un ETF S&amp;P 500).</li>
+      <li><b>Les bons du Trésor américain</b> ne sont pas des actions : ce sont des prêts à très court terme à l'État américain, considérés comme le placement le plus sûr au monde. Leur taux est appelé <b>taux sans risque</b>. Si ton portefeuille fait moins bien, tu as pris le risque des actions… pour gagner moins qu'un placement sans risque. (Le « bond » à 10 ans dont on parle souvent est un taux long, qui sert plutôt à évaluer les actions qu'à s'y comparer.)</li>
+    </ul>
+
+    <h3>Le calcul : un portefeuille « fantôme »</h3>
+    <p>Pour que la comparaison soit juste, on rejoue <b>exactement tes opérations</b>, mais dans l'indice :</p>
+    <ul>
+      <li>chaque fois que tu achètes une action, le <b>même montant</b> (frais compris) est investi dans l'indice, <b>le même jour</b> ;</li>
+      <li>chaque fois que tu vends, la part correspondante de l'indice est vendue le même jour ;</li>
+      <li>les <b>mêmes frais de courtage</b> (${T}) sont appliqués à l'indice, comme si tu achetais un ETF chez le même courtier. Pas de frais pour le placement sans risque.</li>
+    </ul>
+    <div class="formula">parts d'indice = montant investi ÷ (1&nbsp;+&nbsp;${T}) ÷ niveau de l'indice le jour de l'achat</div>
+    <div class="formula">gain de l'indice = parts × niveau actuel − montant investi</div>
+    <div class="formula">écart = gain de mon portefeuille − gain de l'indice</div>
+    <p>Pour le taux sans risque, l'argent est rémunéré chaque jour au taux des bons du Trésor à 3 mois :</p>
+    <div class="formula">valeur(j) = valeur(j−1) × (1 + taux annuel × jours écoulés ÷ 360)</div>
+    <p class="muted small">Les indices utilisés sont des indices « de prix », sans dividendes, comme ton portefeuille simulé : la comparaison est donc cohérente. Exception : l'ETF MSCI World réinvestit ses dividendes, ce qui l'avantage légèrement. Le taux sans risque est appliqué tel quel en euros, sans effet de change.</p>
   </section>
 
   <section class="card doc" id="decouvrir">

@@ -53,7 +53,10 @@ const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 const initials = (name) => {
-  const words = String(name).replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).filter(Boolean);
+  const words = String(name)
+    .replace(/[^\p{L}\p{N} ]/gu, "")
+    .split(/\s+/)
+    .filter((w) => w && !/^(SE|SA|AG|PLC|NV|AS|SPA|INC|CORP|LTD|GROUP)$/i.test(w));
   const txt = words.length === 1 ? words[0].slice(0, 2) : words.slice(0, 2).map((w) => w[0]).join("");
   return esc(txt.toUpperCase());
 };
@@ -82,6 +85,13 @@ const state = {
   loading: null,
   lastLoad: 0,
   dashPeriod: "1m",
+  benchId: (() => {
+    try {
+      return localStorage.getItem("benchId");
+    } catch {
+      return null;
+    }
+  })(),
   dashMetric: "value",
   stockRange: "1y",
   protected: true,
@@ -231,6 +241,7 @@ async function route() {
   const token = ++renderToken;
   destroyCharts();
   closeSheet();
+  view.classList.remove("has-action");
   const hash = location.hash.replace(/^#/, "") || "/";
   const [, page, arg] = hash.split("/");
   if (page !== "methode") window.scrollTo(0, 0);
@@ -322,6 +333,11 @@ async function renderDashboard(token) {
       <div style="margin-top:10px">${seg("period", [["1d", "1 jour"], ["1w", "1 semaine"], ["1m", "1 mois"]], state.dashPeriod)}</div>
     </section>
 
+    <section class="card" id="bench">
+      <div class="card-head"><h2>Comparer à un indice</h2></div>
+      <div id="bench-body"><div class="skeleton" style="height:120px"></div></div>
+    </section>
+
     ${open.length ? `<section class="card">
       <h2>Répartition</h2>
       <div class="alloc">
@@ -345,6 +361,7 @@ async function renderDashboard(token) {
   `;
 
   drawEvolution(token);
+  renderBenchmark(token);
   if (open.length) doughnut($("#alloc"), p.allocation.map((a) => a.name), p.allocation.map((a) => a.value));
 
   view.querySelectorAll("[data-seg]").forEach((el) =>
@@ -405,6 +422,82 @@ async function drawEvolution(token) {
     datasets = [{ label: "Gain cumulé", data: pts.map((x) => x.pnl), borderColor: col, backgroundColor: col + "22", fill: "origin" }];
   }
   evoChart = lineChart($("#evo"), labels, datasets, { intraday: period !== "1m" });
+}
+
+// ---------- Comparaison avec un indice de référence ----------
+
+let benchChart = null;
+async function renderBenchmark(token) {
+  const body = $("#bench-body");
+  let cfg;
+  try {
+    cfg = state.config ?? (state.config = await getConfig());
+  } catch (e) {
+    body.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    return;
+  }
+  if (stale(token) || !$("#bench-body")) return;
+  const id = cfg.benchmarks.some((b) => b.id === state.benchId) ? state.benchId : cfg.defaultBenchmark;
+  body.innerHTML = `
+    <select class="input bench-select" id="bench-select" aria-label="Indice de référence">
+      ${cfg.benchmarks.map((b) => `<option value="${b.id}" ${b.id === id ? "selected" : ""}>${esc(b.name)}</option>`).join("")}
+    </select>
+    <div id="bench-content"><div class="skeleton" style="height:120px;margin-top:12px"></div></div>`;
+  $("#bench-select").addEventListener("change", (e) => {
+    state.benchId = e.target.value;
+    try {
+      localStorage.setItem("benchId", state.benchId);
+    } catch {}
+    renderBenchmark(token);
+  });
+
+  let d;
+  try {
+    d = await api(`/api/benchmark?id=${id}`);
+  } catch (e) {
+    if (!stale(token) && $("#bench-content")) $("#bench-content").innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    return;
+  }
+  if (stale(token) || !$("#bench-content") || $("#bench-select").value !== id) return;
+  const s = d.summary;
+  if (!s) {
+    $("#bench-content").innerHTML = `<p class="muted small">Aucun achat simulé pour l'instant.</p>`;
+    return;
+  }
+  const name = esc(d.benchmark.name);
+  const diff = s.difference;
+  const verdict =
+    Math.abs(diff) < 0.5
+      ? `Tu fais <b>jeu égal</b> avec ${name}.`
+      : diff > 0
+        ? `Tu fais <b class="up">mieux</b> que ${name} : <b class="up">${signedEur(diff)}</b> de plus.`
+        : `${name} aurait rapporté <b class="down">${eur(-diff)} de plus</b> que tes choix d'actions.`;
+  $("#bench-content").innerHTML = `
+    <p class="muted small" style="margin:8px 0 12px">${esc(d.benchmark.description)}</p>
+    <div class="bench-stats">
+      <div class="stat"><div class="k">Mon portefeuille</div>
+        <div class="v ${tone(s.portfolioPnl)}">${signedEur(s.portfolioPnl)}</div><div class="small ${tone(s.portfolioPct)}">${pct(s.portfolioPct)}</div></div>
+      <div class="stat"><div class="k">Même argent dans ${name}</div>
+        <div class="v ${tone(s.benchmarkPnl)}">${signedEur(s.benchmarkPnl)}</div><div class="small ${tone(s.benchmarkPct)}">${pct(s.benchmarkPct)}</div></div>
+    </div>
+    <p class="verdict">${verdict}</p>
+    <div class="chart-box"><canvas id="bench-chart"></canvas></div>
+    <p class="muted small" style="margin:10px 0 0">Gains cumulés depuis ton premier achat (${date(s.since)}), aux mêmes dates et avec les mêmes montants.
+      <a href="#/methode/indices">Qu'est-ce qu'un indice ?</a></p>`;
+
+  if (benchChart) {
+    benchChart.destroy();
+    charts.delete(benchChart);
+  }
+  const pts = d.points;
+  benchChart = lineChart(
+    $("#bench-chart"),
+    pts.map((x) => x.t),
+    [
+      { label: "Mon portefeuille", data: pts.map((x) => x.portfolio), borderColor: cssVar("--accent") },
+      { label: d.benchmark.name, data: pts.map((x) => x.benchmark), borderColor: cssVar("--bench"), borderWidth: 1.8 },
+    ],
+  );
 }
 
 function positionRow(x) {
@@ -587,6 +680,21 @@ async function renderMethod(section, token) {
 
 // ---------- Fiche action ----------
 
+const RANGE_LABELS = {
+  "1d": ["1 jour", "aujourd'hui"],
+  "1w": ["1 sem.", "sur 1 semaine"],
+  "1mo": ["1 mois", "sur 1 mois"],
+  "1y": ["1 an", "sur 1 an"],
+  "5y": ["5 ans", "sur 5 ans"],
+  max: ["Max", "depuis l'introduction en bourse"],
+};
+
+function currencyNote(q) {
+  if (q.currency === "EUR") return "cotée en euros";
+  const unit = q.currency === "GBp" ? "pence (1/100 de livre)" : q.currency;
+  return `cotée en ${esc(unit)} · ≈ ${eur(q.price * q.fx)}`;
+}
+
 async function renderStock(symbol, token) {
   setHeader(symbol, { back: true });
   setTab("");
@@ -599,42 +707,40 @@ async function renderStock(symbol, token) {
   setHeader(q.name, { back: true });
 
   const lots = (p?.positions || []).filter((x) => x.symbol === q.symbol);
-  const isEur = q.currency === "EUR";
+  const last = q.marketTime
+    ? new Date(q.marketTime * 1000).toLocaleString("fr-FR", { ...TZ, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
+    : "";
 
+  view.classList.add("has-action");
   view.innerHTML = `
-    <section class="card price-head">
-      <div class="muted small">${esc(q.symbol)} · ${esc(q.exchange)} · ${esc(q.currency)}</div>
+    <section class="card stock-head">
+      <div class="stock-id">
+        <div class="avatar lg">${initials(q.name)}</div>
+        <div class="main"><h2>${esc(q.name)}</h2>
+          <div class="muted small">${esc(q.symbol)} · ${esc(q.exchange)}</div></div>
+      </div>
       <div class="big">${native(q.price, q.currency)}</div>
-      <span class="pill ${tone(q.change)}">${pct(q.changePct)}</span>
-      <span class="muted small">&nbsp;séance${q.marketTime ? " · " + new Date(q.marketTime * 1000).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</span>
-      ${!isEur ? `<div class="muted small" style="margin-top:6px">≈ ${eur(q.price * q.fx)} au taux actuel</div>` : ""}
-      <div class="chart-box small" style="margin-top:14px"><canvas id="pc"></canvas></div>
-      <div style="margin-top:10px">${seg("srange", [["1d", "1J"], ["1w", "1S"], ["1mo", "1M"], ["1y", "1A"], ["5y", "5A"], ["max", "Max"]], state.stockRange)}</div>
+      <div class="change-line">
+        <span class="pill ${tone(q.change)}">${q.change >= 0 ? "+" : "−"}${native(Math.abs(q.change), q.currency)} (${pct(q.changePct)})</span>
+        <span class="muted small">aujourd'hui</span>
+      </div>
+      <div class="muted small" style="margin-top:8px">Dernier cours${last ? ` : ${last}` : ""} · ${currencyNote(q)}</div>
     </section>
+
+    <section class="card">
+      <div class="card-head"><h2>Évolution du cours</h2><span id="range-perf"></span></div>
+      <div class="chart-box small"><canvas id="pc"></canvas></div>
+      <div style="margin-top:10px" class="seg-full">${seg("srange", Object.entries(RANGE_LABELS).map(([v, [l]]) => [v, l]), state.stockRange)}</div>
+      <div class="minmax muted small" id="minmax"></div>
+    </section>
+
+    ${holdingCard(lots, q)}
 
     ${featuredCard(q.symbol)}
 
-    ${lots.length ? `<section class="card"><h2>Mes positions</h2>${lots.map(lotBlock).join("")}</section>` : ""}
-
-    <section class="card">
-      <h2>Simuler un achat</h2>
-      <form id="buy" autocomplete="off">
-        <div class="field">${seg("mode", [["amount", "Montant en €"], ["quantity", "Nombre d'actions"]], "amount")}</div>
-        <div class="grid2">
-          <label class="field"><span id="amt-label">Montant à investir (€)</span>
-            <input class="input" type="number" name="val" inputmode="decimal" min="0" step="any" placeholder="15" required></label>
-          <label class="field"><span>Date d'achat</span>
-            <input class="input" type="date" name="date" value="${today()}" max="${today()}" required></label>
-        </div>
-        <div class="estimate" id="est" hidden></div>
-        <div class="error" id="buy-err" hidden></div>
-        <button class="btn" type="submit" id="buy-btn" disabled>Simuler l'achat</button>
-      </form>
-      <p class="muted small" style="margin:10px 2px 0">Les fractions d'actions sont autorisées : tu peux investir 15 €.
-      Frais de courtage simulés : ${feeLabel() || "un pourcentage"} de chaque ordre (achat et vente), déjà inclus dans le montant.
-      Date passée : cours de clôture de ce jour (ou du jour de bourse suivant). Aujourd'hui : dernier cours connu.
-      <a href="#/methode/prix">Comment c'est calculé ?</a></p>
-    </section>`;
+    <div class="action-bar"><button class="btn" id="open-buy">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Simuler un achat</button></div>`;
 
   drawPrice(q);
   view.querySelector('[data-seg="srange"]').addEventListener("click", async (e) => {
@@ -644,14 +750,13 @@ async function renderStock(symbol, token) {
     e.currentTarget.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
     try {
       const q2 = await api(`/api/quote/${encodeURIComponent(symbol)}?range=${state.stockRange}`);
-      if (!stale(token)) drawPrice(q2, lots);
+      if (!stale(token)) drawPrice(q2);
     } catch (err) {
       toast(err.message);
     }
   });
-
-  bindLots(view, lots, token);
-  bindBuyForm(q, token);
+  $("#open-buy").addEventListener("click", () => openBuySheet(q));
+  bindLots(view, lots);
 }
 
 let priceChart = null;
@@ -661,12 +766,18 @@ function drawPrice(q) {
     charts.delete(priceChart);
   }
   const pts = q.points;
-  const up = pts.length < 2 || pts[pts.length - 1].close >= pts[0].close;
-  const col = cssVar(up ? "--up" : "--down");
+  const closes = pts.map((x) => x.close);
+  const perf = q.range === "1d" ? q.changePct : pts.length > 1 ? ((closes[closes.length - 1] - closes[0]) / closes[0]) * 100 : 0;
+  const col = cssVar(perf >= 0 ? "--up" : "--down");
+  const label = RANGE_LABELS[q.range]?.[1] ?? "";
+  $("#range-perf").innerHTML = `<span class="pill ${tone(perf)}">${pct(perf)}</span> <span class="muted small">${label}</span>`;
+  $("#minmax").innerHTML = closes.length
+    ? `Plus bas : <b>${native(Math.min(...closes), q.currency)}</b> · Plus haut : <b>${native(Math.max(...closes), q.currency)}</b>`
+    : "";
   priceChart = lineChart(
     $("#pc"),
     pts.map((x) => x.t),
-    [{ label: "Cours", data: pts.map((x) => x.close), borderColor: col, backgroundColor: col + "1f", fill: true }],
+    [{ label: "Cours", data: closes, borderColor: col, backgroundColor: col + "1f", fill: true }],
     { formatY: (v) => native(v, q.currency), intraday: q.intraday },
   );
 }
@@ -679,24 +790,54 @@ function featuredCard(symbol) {
     <p style="margin:6px 0 0">${esc(f.why)}</p></section>`;
 }
 
+// Synthèse de ce que je détiens sur cette action + détail de chaque achat.
+function holdingCard(lots, q) {
+  if (!lots.length) {
+    return `<section class="card"><h2>Ma position</h2>
+      <p class="muted small" style="margin:0">Tu ne détiens pas encore cette action. Utilise le bouton <b>Simuler un achat</b> pour voir ce que tu aurais gagné.</p></section>`;
+  }
+  const open = lots.filter((l) => l.status === "open");
+  const closed = lots.filter((l) => l.status === "closed");
+  const sum = (xs, k) => xs.reduce((s, x) => s + x[k], 0);
+  const value = sum(open, "value");
+  const cost = sum(open, "cost");
+  const gain = value - cost;
+  const summary = open.length
+    ? `<div class="bench-stats">
+        <div class="stat"><div class="k">Je détiens</div><div class="v">${qty(sum(open, "quantity"))} action${sum(open, "quantity") >= 2 ? "s" : ""}</div></div>
+        <div class="stat"><div class="k">Valeur actuelle</div><div class="v">${eur(value)}</div></div>
+        <div class="stat"><div class="k">Investi</div><div class="v">${eur(cost)}</div></div>
+        <div class="stat"><div class="k">Gain / perte</div><div class="v ${tone(gain)}">${signedEur(gain)}</div>
+          <div class="small ${tone(gain)}">${pct(cost ? (gain / cost) * 100 : 0)}</div></div>
+      </div>`
+    : "";
+  return `<section class="card">
+    <h2>Ma position</h2>
+    ${summary}
+    ${open.length ? `<h3 class="sub-h">Mes achats</h3>${open.map(lotBlock).join("")}` : ""}
+    ${closed.length ? `<h3 class="sub-h">Mes ventes</h3>${closed.map(lotBlock).join("")}` : ""}
+  </section>`;
+}
+
 function lotBlock(x) {
   const closed = x.status === "closed";
+  const line = closed
+    ? `Acheté le ${date(x.buyDate)} à ${native(x.buyPrice, x.currency)}, vendu le ${date(x.sellDate)} à ${native(x.sellPrice, x.currency)}`
+    : `Acheté le ${date(x.buyDate)} à ${native(x.buyPrice, x.currency)}`;
   return `<div class="lot" data-id="${x.id}">
     <div class="top">
       <div>
-        <div><b>${qty(x.quantity)} action${x.quantity >= 2 ? "s" : ""}</b> achetée${x.quantity >= 2 ? "s" : ""} le ${date(x.buyDate)}</div>
-        <div class="muted small">à ${native(x.buyPrice, x.currency)} · coût ${eur(x.cost)}${x.buyFees ? ` (dont ${eur(x.buyFees)} de frais)` : ""}</div>
-        ${closed ? `<div class="muted small">vendue le ${date(x.sellDate)} à ${native(x.sellPrice, x.currency)}${x.sellFees ? ` · frais ${eur(x.sellFees)}` : ""}</div>` : ""}
+        <div><b>${qty(x.quantity)} action${x.quantity >= 2 ? "s" : ""}</b> · ${eur(x.cost)} investis</div>
+        <div class="muted small">${line}</div>
       </div>
-      <div class="right" style="text-align:right">
-        <div><b>${eur(x.value)}</b></div>
-        <div class="small ${tone(x.pnl)}">${signedEur(x.pnl)}</div>
+      <div style="text-align:right;flex-shrink:0">
+        <div class="${tone(x.pnl)}"><b>${signedEur(x.pnl)}</b></div>
         <div class="small ${tone(x.pnl)}">${pct(x.pnlPct)}</div>
       </div>
     </div>
     <div class="actions">
       ${closed ? `<button class="btn sm secondary" data-act="reopen">Annuler la vente</button>` : `<button class="btn sm secondary" data-act="sell">Vendre</button>`}
-      <button class="btn sm danger" data-act="delete">Supprimer</button>
+      <button class="btn sm ghost" data-act="delete">Supprimer</button>
     </div>
   </div>`;
 }
@@ -710,9 +851,9 @@ function bindLots(root, lots) {
       const act = b.dataset.act;
       try {
         if (act === "delete") {
-          if (!confirm("Supprimer définitivement cette position simulée ?")) return;
+          if (!confirm("Supprimer définitivement cet achat simulé ? (Pour garder une trace du gain, utilise plutôt « Vendre ».)")) return;
           await api(`/api/positions/${lot.id}`, { method: "DELETE" });
-          toast("Position supprimée");
+          toast("Achat supprimé");
         } else if (act === "reopen") {
           await api(`/api/positions/${lot.id}`, { method: "PATCH", body: { action: "reopen" } });
           toast("Vente annulée");
@@ -729,12 +870,41 @@ function bindLots(root, lots) {
   });
 }
 
-function bindBuyForm(q) {
+// ---------- Achat (feuille modale guidée) ----------
+
+function openBuySheet(q) {
+  const quick = [15, 50, 100, 500, 1000];
+  $("#sheet-body").innerHTML = `
+    <h3>Simuler un achat</h3>
+    <div class="muted small" style="margin:-8px 0 14px">${esc(q.name)} · cours actuel ${native(q.price, q.currency)}</div>
+    <form id="buy" autocomplete="off">
+      <div class="step"><div class="step-title"><span class="step-n">1</span> Combien ?</div>
+        ${seg("mode", [["amount", "En euros"], ["quantity", "En nombre d'actions"]], "amount")}
+        <input class="input big-input" type="number" name="val" inputmode="decimal" min="0" step="any" placeholder="Montant en €" required>
+        <div class="chips quick" id="quick">${quick.map((v) => `<button type="button" class="chip" data-v="${v}">${eur(v).replace(",00", "")}</button>`).join("")}</div>
+      </div>
+      <div class="step"><div class="step-title"><span class="step-n">2</span> Quand ?</div>
+        ${seg("when", [["today", "Aujourd'hui"], ["past", "À une date passée"]], "today")}
+        <input class="input" type="date" name="date" value="${today()}" max="${today()}" hidden>
+        <div class="muted small" id="when-help" style="margin-top:6px">Au dernier cours connu.</div>
+      </div>
+      <div class="estimate" id="est" hidden></div>
+      <div class="error" id="buy-err" hidden></div>
+      <div class="grid2">
+        <button class="btn secondary" type="button" id="buy-cancel">Annuler</button>
+        <button class="btn" type="submit" id="buy-btn" disabled>Confirmer</button>
+      </div>
+      <p class="muted small" style="margin:10px 2px 0">Fractions d'actions autorisées. Frais de courtage (${feeLabel() || "simulés"}) inclus dans le montant.
+        <a href="#/methode/prix">Comment c'est calculé ?</a></p>
+    </form>`;
+  sheet.showModal();
   const form = $("#buy");
   const est = $("#est");
   const err = $("#buy-err");
   const btn = $("#buy-btn");
+  $("#buy-cancel").onclick = closeSheet;
   let mode = "amount";
+  let when = "today";
   let timer;
   let seq = 0;
 
@@ -742,7 +912,7 @@ function bindBuyForm(q) {
     const v = parseFloat(String(form.val.value).replace(",", "."));
     return {
       symbol: q.symbol,
-      date: form.date.value || today(),
+      date: when === "past" && form.date.value ? form.date.value : today(),
       mode,
       amount: mode === "amount" ? v : undefined,
       quantity: mode === "quantity" ? v : undefined,
@@ -764,10 +934,10 @@ function bindBuyForm(q) {
       if (my !== seq) return;
       est.hidden = false;
       est.innerHTML = `
-        <div class="line"><span class="muted">Cours retenu (${date(e.date)})</span><span>${native(e.price, e.currency)}</span></div>
+        <div class="line"><span class="muted">${when === "past" ? `Clôture du ${date(e.date)}` : "Dernier cours"}</span><span>${native(e.price, e.currency)}</span></div>
         ${e.currency !== "EUR" ? `<div class="line"><span class="muted">Taux de change</span><span>1 ${esc(e.currency)} = ${numFmt(4).format(e.fx)} €</span></div>` : ""}
-        <div class="line"><span class="muted">Quantité</span><span>${qty(e.quantity)} action${e.quantity >= 2 ? "s" : ""}</span></div>
-        <div class="line"><span class="muted">Montant investi en actions</span><span>${eur(e.invested)}</span></div>
+        <div class="line"><span class="muted">Tu obtiens</span><span><b>${qty(e.quantity)} action${e.quantity >= 2 ? "s" : ""}</b></span></div>
+        <div class="line"><span class="muted">Montant en actions</span><span>${eur(e.invested)}</span></div>
         <div class="line"><span>${feeLink()}</span><span>${eur(e.fees)}</span></div>
         <div class="line total"><span>Total débité</span><span>${eur(e.total)}</span></div>`;
       btn.disabled = false;
@@ -782,7 +952,7 @@ function bindBuyForm(q) {
   const schedule = () => {
     clearTimeout(timer);
     btn.disabled = true;
-    timer = setTimeout(preview, 350);
+    timer = setTimeout(preview, 300);
   };
 
   form.addEventListener("input", schedule);
@@ -791,8 +961,26 @@ function bindBuyForm(q) {
     if (!b) return;
     mode = b.dataset.v;
     e.currentTarget.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
-    $("#amt-label").textContent = mode === "amount" ? "Montant à investir (€)" : "Nombre d'actions";
-    form.val.placeholder = mode === "amount" ? "15" : "0,5";
+    form.val.placeholder = mode === "amount" ? "Montant en €" : "Nombre d'actions (ex : 0,5)";
+    $("#quick").hidden = mode !== "amount";
+    schedule();
+  });
+  form.querySelector('[data-seg="when"]').addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    when = b.dataset.v;
+    e.currentTarget.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b));
+    form.date.hidden = when !== "past";
+    $("#when-help").textContent =
+      when === "past"
+        ? "Au cours de clôture de ce jour (ou du jour de bourse suivant si la bourse était fermée)."
+        : "Au dernier cours connu.";
+    schedule();
+  });
+  $("#quick").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-v]");
+    if (!b) return;
+    form.val.value = b.dataset.v;
     schedule();
   });
 
@@ -801,9 +989,10 @@ function bindBuyForm(q) {
     btn.disabled = true;
     try {
       const { estimate: r } = await api("/api/positions", { method: "POST", body: payload() });
-      toast(`Achat simulé : ${qty(r.quantity)} × ${q.name}`);
+      closeSheet();
+      toast(`Achat simulé : ${qty(r.quantity)} action${r.quantity >= 2 ? "s" : ""} ${q.name}`);
       await loadPortfolio(true);
-      location.hash = "#/";
+      route();
     } catch (ex) {
       err.textContent = ex.message;
       err.hidden = false;

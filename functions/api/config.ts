@@ -1,3 +1,4 @@
+import { BENCHMARKS, DEFAULT_BENCHMARK } from "../../lib/benchmark";
 import type { Env } from "../../lib/env";
 import { SIM_CONFIG } from "../../lib/fees";
 import { json } from "../../lib/http";
@@ -13,4 +14,6 @@ export const onRequestGet: PagesFunction<Env> = async () =>
     trendUniverseSize: new Set(TREND_UNIVERSE).size,
     trendTopN: TREND_TOP_N,
     featured: FEATURED,
+    benchmarks: BENCHMARKS.map(({ id, name, description, kind, currency }) => ({ id, name, description, kind, currency })),
+    defaultBenchmark: DEFAULT_BENCHMARK,
   });
