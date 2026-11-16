@@ -22,6 +22,7 @@ export const SECTIONS = [
   ["devises", "Devises"],
   ["gains", "Calcul des gains"],
   ["graphique", "Graphique d'évolution"],
+  ["decouvrir", "Tendances et actions à connaître"],
   ["limites", "Ce qui n'est pas simulé"],
 ];
 
@@ -157,6 +158,32 @@ export function methodHtml(cfg) {
       <li>Une position entre dans le graphique à l'<b>heure de saisie</b> pour un achat du jour, ou à la <b>clôture</b> du jour d'achat pour une date passée. Elle en sort à la clôture du jour de vente.</li>
       <li>Le graphique est limité à 1 mois pour rester lisible ; la fiche de chaque action montre l'historique jusqu'à plusieurs décennies.</li>
     </ul>
+  </section>
+
+  <section class="card doc" id="decouvrir">
+    <h2>Tendances et actions à connaître</h2>
+    <h3>Tendances du jour</h3>
+    <dl class="params">
+      <dt>Univers</dt><dd>${cfg.trendUniverseSize} grandes capitalisations européennes (France, Allemagne, Pays-Bas, Italie, Espagne, Suisse, Royaume-Uni, Danemark)</dd>
+      <dt>Classement</dt><dd>Variation sur la dernière séance</dd>
+      <dt>Affichage</dt><dd>Les ${cfg.trendTopN} plus fortes hausses et les ${cfg.trendTopN} plus fortes baisses</dd>
+      <dt>Mise à jour</dt><dd>Cours mis en cache ${min(cfg.cacheSeconds.quotes)}</dd>
+    </dl>
+    <div class="formula">variation = (dernier cours − clôture de la séance précédente) ÷ clôture de la séance précédente</div>
+    <ul>
+      <li><b>Pourquoi un univers fixe ?</b> Yahoo Finance propose une liste « trending », mais elle ne contient quasiment que des actions américaines. On calcule donc nos propres tendances sur les plus grandes sociétés européennes, qui sont aussi les plus liquides.</li>
+      <li><b>Pourquoi les grandes capitalisations ?</b> Les petites sociétés peuvent bouger de 20 % sur une simple rumeur ; sur les grandes, une forte variation signale en général une vraie nouvelle (résultats, annonce, secteur en mouvement).</li>
+      <li>Le week-end et les jours fériés, ce sont les variations de la <b>dernière séance</b> qui sont affichées.</li>
+      <li>Le mini-graphique montre la dernière séance (un point toutes les 15 min) ; la ligne pointillée est la clôture de la veille.</li>
+    </ul>
+    <h3>${cfg.featured.length} actions à connaître</h3>
+    <p>Une sélection fixe de sociétés que tout investisseur en actions européennes croise tôt ou tard. Critères :</p>
+    <ul>
+      <li><b>Leader mondial ou européen</b> de son secteur ;</li>
+      <li>parmi les <b>plus grosses capitalisations</b> d'Europe, donc très suivies et faciles à acheter ;</li>
+      <li><b>diversité</b> des secteurs (luxe, énergie, tech, santé, banque, industrie, défense…) et des pays, pour comprendre comment chaque secteur réagit à l'actualité.</li>
+    </ul>
+    <p><b>Ce ne sont pas des recommandations d'achat.</b> Cette liste sert à découvrir le marché et à tester des simulations, pas à indiquer ce qui va monter.</p>
   </section>
 
   <section class="card doc" id="limites">

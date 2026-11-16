@@ -11,6 +11,9 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
 - **Tableau de bord** : valeur du portefeuille, plus-value totale / latente / réalisée, variation du jour,
   graphique d'évolution (valeur vs montant investi, ou gain cumulé) sur 1 jour (pas de 5 min),
   1 semaine (pas de 30 min) ou 1 mois (journalier), répartition par action, positions ouvertes et vendues.
+- **Découvrir** : tendances du jour (5 plus fortes hausses / baisses parmi ~64 grandes capitalisations
+  européennes, avec mini-graphique de la séance) et 20 actions à connaître, chacune avec une phrase d'explication
+  (liste dans `lib/universe.ts`).
 - **Recherche** d'actions sur les bourses européennes (Euronext Paris/Amsterdam/Bruxelles/Lisbonne/Milan,
   XETRA, Madrid, SIX, Londres, places nordiques…). Saisie directe d'un ticker Yahoo possible (ex : `ITX.MC`).
 - **Fiche action** : cours, variation, graphique (1J, 1S, 1M, 1A, 5A, Max), tes positions sur cette action.
@@ -52,6 +55,7 @@ functions/           API (Cloudflare Pages Functions)
   api/timeline.ts    GET   /api/timeline?period=1d|1w|1m (évolution)
   api/session.ts     GET   /api/session              (accès protégé ou non)
   api/config.ts      GET   /api/config               (paramètres de simulation)
+  api/discover.ts    GET   /api/discover             (tendances + actions à connaître)
   api/positions/     POST  /api/positions[?dryRun=1] (achat)
                      PATCH /api/positions/:id[?dryRun=1] (vente / annulation)
                      DELETE /api/positions/:id

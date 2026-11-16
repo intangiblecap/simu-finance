@@ -245,6 +245,54 @@ export function seriesAt(points: SeriesPoint[], t: number): number | null {
   return points[lo].close;
 }
 
+// ---------- Cours de plusieurs actions en une requête (onglet « Découvrir ») ----------
+
+export interface SparkQuote {
+  symbol: string;
+  name: string;
+  currency: string;
+  price: number;
+  prevClose: number; // clôture de la séance précédente
+  changePct: number; // variation sur la dernière séance
+  marketTime: number;
+  closes: number[]; // cours de la dernière séance (pas de 15 min), pour les mini-graphiques
+}
+
+const SPARK_BATCH = 20; // maximum accepté par Yahoo par requête
+
+export async function getSpark(symbols: string[]): Promise<SparkQuote[]> {
+  const batches: string[][] = [];
+  for (let i = 0; i < symbols.length; i += SPARK_BATCH) batches.push(symbols.slice(i, i + SPARK_BATCH));
+  const results = await Promise.all(
+    batches.map(async (b) => {
+      const url = `${Q1}/v7/finance/spark?symbols=${b.map(encodeURIComponent).join(",")}&range=1d&interval=15m`;
+      const json = await cachedJson(url, CACHE_TTL.quotes);
+      return (json?.spark?.result ?? []) as any[];
+    }),
+  );
+  const out: SparkQuote[] = [];
+  for (const x of results.flat()) {
+    const r = x?.response?.[0];
+    const m = r?.meta;
+    if (!m || m.regularMarketPrice == null) continue;
+    const closes = ((r.indicators?.quote?.[0]?.close ?? []) as (number | null)[]).filter(
+      (c): c is number => c != null && Number.isFinite(c),
+    );
+    const prev = m.chartPreviousClose ?? m.previousClose ?? closes[0] ?? m.regularMarketPrice;
+    out.push({
+      symbol: x.symbol,
+      name: m.longName ?? m.shortName ?? x.symbol,
+      currency: m.currency ?? "EUR",
+      price: m.regularMarketPrice,
+      prevClose: prev,
+      changePct: prev ? round(((m.regularMarketPrice - prev) / prev) * 100, 2) : 0,
+      marketTime: m.regularMarketTime ?? 0,
+      closes: closes.map((c) => round(c, 4)),
+    });
+  }
+  return out;
+}
+
 export async function search(q: string): Promise<SearchResult[]> {
   const url =
     `${Q2}/v1/finance/search?q=${encodeURIComponent(q)}` +
