@@ -1091,9 +1091,10 @@ async function renderSearch(token) {
       box.querySelector("ul").innerHTML = results.length
         ? results
             .map(
-              (r) => `<li><a class="row" href="#/stock/${encodeURIComponent(r.symbol)}">
+              (r, i) => `${groupNote(r, results[i - 1])}<li><a class="row ${r.listing ? "listing-" + r.listing.role : ""}" href="#/stock/${encodeURIComponent(r.symbol)}">
               <div class="avatar">${initials(r.name)}</div>
-              <div class="main"><div class="title">${esc(r.name)}</div><div class="sub">${esc(r.symbol)} · ${esc(r.exchange)}</div></div>
+              <div class="main"><div class="title">${esc(r.name)}</div><div class="sub">${esc(r.symbol)} · ${esc(r.exchange)}</div>
+                ${listingLine(r)}</div>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--muted)"><path d="M9 18l6-6-6-6"/></svg>
             </a></li>`,
             )
@@ -1110,6 +1111,25 @@ async function renderSearch(token) {
   if (lastQuery) run();
   renderDiscover(disc, token);
 }
+
+// Doublons (même société sur plusieurs bourses) : note avant le groupe + sous-titre par cotation.
+const currencyName = (c) =>
+  ({ EUR: "en euros", GBp: "en pence (livre sterling)", GBP: "en livres sterling", CHF: "en francs suisses", DKK: "en couronnes danoises", SEK: "en couronnes suédoises", NOK: "en couronnes norvégiennes", PLN: "en zlotys", CZK: "en couronnes tchèques" })[c] ??
+  (c ? `en ${c}` : "");
+
+function groupNote(r, prev) {
+  if (!r.listing || prev?.listing?.group === r.listing.group) return "";
+  return `<li class="group-note">${esc(shortNameJs(r.name))} est cotée sur ${r.listing.count} bourses : c'est la même entreprise.
+    Préfère la <b>cotation principale</b>, la plus échangée ; en euros, le résultat est quasiment le même.</li>`;
+}
+function listingLine(r) {
+  if (!r.listing) return "";
+  const cur = currencyName(r.listing.currency);
+  return r.listing.role === "primary"
+    ? `<div class="listing-line"><span class="tag-primary">Cotation principale</span> la plus échangée${cur ? " · " + cur : ""}</div>`
+    : `<div class="listing-line muted">Cotation secondaire${cur ? " · " + cur : ""} · moins d'échanges, cours parfois légèrement décalé</div>`;
+}
+const shortNameJs = (n) => String(n).replace(/\s+-\s+.*$/, "").replace(/,?\s+(S\.?A\.?|SE|AG|plc|N\.?V\.?|A\/S|S\.p\.A\.?)\.?$/i, "");
 
 // ---------- Découvrir : tendances et actions à connaître ----------
 
