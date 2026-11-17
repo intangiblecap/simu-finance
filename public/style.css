@@ -379,3 +379,9 @@ a.ev-body:active { background: var(--surface-2); }
 .listing-line { font-size: 12.5px; margin-top: 3px; line-height: 1.35; }
 .tag-primary { display: inline-block; font-size: 11px; font-weight: 700; color: var(--up); background: var(--up-bg); border-radius: 5px; padding: 1px 6px; margin-right: 4px; }
 .row.listing-secondary .title { font-weight: 500; }
+
+/* ---------- Liquidité ---------- */
+.pill.warn { background: color-mix(in srgb, #d97706 16%, transparent); color: #b45309; }
+@media (prefers-color-scheme: dark) { .pill.warn { color: #f0a03c; } }
+.liq-warn { margin-top: 10px; padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.4;
+  background: color-mix(in srgb, #d97706 14%, transparent); }

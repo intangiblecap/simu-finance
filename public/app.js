@@ -1293,6 +1293,8 @@ async function renderStock(symbol, token) {
       <div class="minmax muted small" id="minmax"></div>
     </section>
 
+    ${liquidityCard(q)}
+
     ${holdingCard(lots, q)}
 
     ${featuredCard(q.symbol)}
@@ -1341,6 +1343,37 @@ function drawPrice(q) {
   );
 }
 
+// ---------- Liquidité ----------
+
+const compactEur = (n) =>
+  n >= 1e9 ? `${numFmt(1).format(n / 1e9)} Md€` : n >= 1e6 ? `${numFmt(n >= 1e7 ? 0 : 1).format(n / 1e6)} M€` : `${numFmt(0).format(n / 1e3)} k€`;
+const liqTone = (level) => ({ "Très liquide": "up", Liquide: "up", "Peu liquide": "warn", "Très peu liquide": "down" })[level] ?? "";
+
+function liqLink(l) {
+  return `<a href="#/methode/liquidite" class="muted">Coût de liquidité (${numFmt(2).format(l.costPct)} %) ⓘ</a>`;
+}
+function liqWarning(l) {
+  if (!l?.warning) return "";
+  return `<div class="liq-warn">⚠️ Ton ordre représente <b>${numFmt(1).format(l.participation)} %</b> de ce qui s'échange en une journée sur cette bourse :
+    il ferait bouger le prix d'environ ${numFmt(2).format(l.impactPct)} %.</div>`;
+}
+function liquidityCard(q) {
+  const l = q.liquidity;
+  if (!l) return "";
+  const low = l.level === "Peu liquide" || l.level === "Très peu liquide";
+  return `<section class="card">
+    <div class="card-head"><h2>Liquidité</h2><span class="pill ${liqTone(l.level)}">${esc(l.level)}</span></div>
+    <dl class="params">
+      <dt>Échangé par jour</dt><dd>${l.adv ? `≈ ${compactEur(l.adv)}` : "inconnu"}</dd>
+      <dt>Écart achat/vente</dt><dd>≈ ${numFmt(2).format(l.spreadPct)} % <span class="muted small">(estimé)</span></dd>
+    </dl>
+    <p class="muted small" style="margin:0">${low
+      ? "Peu d'échanges : acheter puis revendre ici coûte plus cher. Si l'action est aussi cotée ailleurs, préfère sa cotation principale."
+      : "Beaucoup d'échanges : le coût de liquidité est négligeable pour un particulier."}
+      <a href="#/methode/liquidite">En savoir plus</a></p>
+  </section>`;
+}
+
 function featuredCard(symbol) {
   const f = state.config?.featured?.find((x) => x.symbol === symbol);
   if (!f) return "";
@@ -1382,7 +1415,7 @@ function lotBlock(x) {
   const closed = x.status === "closed";
   const line = closed
     ? `Acheté le ${date(x.buyDate)} à ${native(x.buyPrice, x.currency)}, vendu le ${date(x.sellDate)} à ${native(x.sellPrice, x.currency)}`
-    : `Acheté le ${date(x.buyDate)} à ${native(x.buyPrice, x.currency)}`;
+    : `Acheté le ${date(x.buyDate)} à ${native(x.buyPrice, x.currency)}${x.buyLiq >= 0.01 ? ` (dont ${eur(x.buyLiq)} de liquidité)` : ""}`;
   return `<div class="lot" data-id="${x.id}">
     <div class="top">
       <div>
@@ -1494,12 +1527,15 @@ function openBuySheet(q) {
       if (my !== seq) return;
       est.hidden = false;
       est.innerHTML = `
-        <div class="line"><span class="muted">${when === "past" ? `Clôture du ${date(e.date)}` : "Dernier cours"}</span><span>${native(e.price, e.currency)}</span></div>
+        <div class="line"><span class="muted">${when === "past" ? `Clôture du ${date(e.date)}` : "Cours du marché"}</span><span>${native(e.marketPrice, e.currency)}</span></div>
+        <div class="line"><span class="muted">Prix payé, liquidité comprise</span><span>${native(e.price, e.currency)}</span></div>
         ${e.currency !== "EUR" ? `<div class="line"><span class="muted">Taux de change</span><span>1 ${esc(e.currency)} = ${numFmt(4).format(e.fx)} €</span></div>` : ""}
         <div class="line"><span class="muted">Tu obtiens</span><span><b>${qty(e.quantity)} action${e.quantity >= 2 ? "s" : ""}</b></span></div>
-        <div class="line"><span class="muted">Montant en actions</span><span>${eur(e.invested)}</span></div>
-        <div class="line"><span>${feeLink()}</span><span>${eur(e.fees)}</span></div>
-        <div class="line total"><span>Total débité</span><span>${eur(e.total)}</span></div>`;
+        <div class="line"><span class="muted">Actions au cours du marché</span><span>${eur(e.invested - e.liquidity.costEur)}</span></div>
+        <div class="line"><span>+ ${liqLink(e.liquidity)}</span><span>${eur(e.liquidity.costEur)}</span></div>
+        <div class="line"><span>+ ${feeLink()}</span><span>${eur(e.fees)}</span></div>
+        <div class="line total"><span>Total débité</span><span>${eur(e.total)}</span></div>
+        ${liqWarning(e.liquidity)}`;
       btn.disabled = false;
     } catch (ex) {
       if (my !== seq) return;
@@ -1600,11 +1636,14 @@ function openSellSheet(lot) {
       const { estimate: e } = await api(`/api/positions/${lot.id}?dryRun=1`, { method: "PATCH", body: body() });
       if (my !== seq) return;
       est.innerHTML = `
-        <div class="line"><span class="muted">Cours retenu (${date(e.date)})</span><span>${native(e.price, lot.currency)}</span></div>
+        <div class="line"><span class="muted">Cours du marché (${date(e.date)})</span><span>${native(e.marketPrice, lot.currency)}</span></div>
+        <div class="line"><span class="muted">Prix reçu, liquidité comprise</span><span>${native(e.price, lot.currency)}</span></div>
         <div class="line"><span class="muted">Montant de la vente</span><span>${eur(e.gross)}</span></div>
+        <div class="line"><span>${liqLink(e.liquidity)}</span><span class="muted">déjà déduit : ${eur(e.liquidity.costEur)}</span></div>
         <div class="line"><span>${feeLink()}</span><span>−${eur(e.fees)}</span></div>
         <div class="line"><span class="muted">Tu récupères</span><span>${eur(e.proceeds)}</span></div>
-        <div class="line total"><span>Plus-value</span><span class="${tone(e.pnl)}">${signedEur(e.pnl)}</span></div>`;
+        <div class="line total"><span>Plus-value</span><span class="${tone(e.pnl)}">${signedEur(e.pnl)}</span></div>
+        ${liqWarning(e.liquidity)}`;
       btn.disabled = false;
     } catch (ex) {
       if (my !== seq) return;

@@ -28,6 +28,8 @@ export interface PositionRow {
   buy_price: number;
   buy_fx: number;
   buy_fees: number;
+  buy_liq?: number; // coût de liquidité à l'achat (€), déjà inclus dans buy_price
+  sell_liq?: number;
   portfolio_id?: number;
   sell_date: string | null;
   sell_price: number | null;
@@ -62,7 +64,8 @@ export function executionAt(chart: Chart, fx: FxSeries, date: string): Execution
 }
 
 export async function loadMarket(symbol: string, currency: string | null, date: string) {
-  const range = rangeCovering(date);
+  // ~45 jours de marge avant la date : 20 séances pour estimer la liquidité.
+  const range = rangeCovering(new Date(Date.parse(date) - 45 * 86_400_000).toISOString().slice(0, 10));
   const chart = await getChart(symbol, range);
   const fx = await getFx(currency ?? chart.currency, range);
   return { chart, fx };
@@ -85,6 +88,8 @@ export interface PositionView {
   buyDate: string;
   buyPrice: number;
   buyFees: number;
+  buyLiq: number; // coût de liquidité à l'achat (€), inclus dans le prix d'achat
+  sellLiq: number;
   cost: number; // EUR, frais inclus
   status: "open" | "closed";
   sellDate: string | null;
@@ -169,6 +174,8 @@ export async function computePortfolio(rows: PositionRow[]): Promise<Portfolio> 
       buyDate: r.buy_date,
       buyPrice: r.buy_price,
       buyFees: r.buy_fees,
+      buyLiq: r.buy_liq ?? 0,
+      sellLiq: r.sell_liq ?? 0,
       cost: round(cost),
       sellDate: r.sell_date,
       sellPrice: r.sell_price,

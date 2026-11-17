@@ -1,8 +1,9 @@
 import type { Env } from "../../../lib/env";
 import { HttpError, errorResponse, isIsoDate, json, readJson, todayParis } from "../../../lib/http";
-import { executionAt, loadMarket } from "../../../lib/portfolio";
+import { loadMarket } from "../../../lib/portfolio";
 import { currentPortfolio } from "../../../lib/scope";
-import { MIN_ORDER_EUR, floorQty, netFromBudget, orderFees } from "../../../lib/fees";
+import { MIN_ORDER_EUR } from "../../../lib/fees";
+import { buyQuote, liquidityView } from "../../../lib/orders";
 import { EUROPEAN_EXCHANGES, exchangeSuffix, isEuropean, round } from "../../../lib/yahoo";
 
 interface BuyRequest {
@@ -31,43 +32,36 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     if (chart.instrumentType && chart.instrumentType !== "EQUITY") {
       throw new HttpError(400, "Seules les actions sont supportées pour l'instant");
     }
-    const exec = executionAt(chart, fx, date);
-    const unitEur = exec.price * exec.fx;
-
-    // Fractions d'actions autorisées (voir QTY_DECIMALS). Frais calculés automatiquement.
-    let quantity: number;
-    let fees: number;
+    // Fractions d'actions autorisées ; frais et coût de liquidité calculés automatiquement.
+    let req: { amount?: number; quantity?: number };
     if (body.mode === "amount") {
       const amount = Number(body.amount);
       if (!Number.isFinite(amount) || amount < MIN_ORDER_EUR) throw new HttpError(400, `Montant minimum : ${MIN_ORDER_EUR} €`);
-      const split = netFromBudget(amount);
-      fees = split.fees;
-      quantity = floorQty(split.net / unitEur);
-    } else {
-      quantity = floorQty(Number(body.quantity));
-      if (!Number.isFinite(quantity) || quantity <= 0) throw new HttpError(400, "Quantité invalide");
-      fees = orderFees(quantity * unitEur);
-    }
-    if (quantity <= 0) throw new HttpError(400, "Montant trop faible");
-    const invested = round(quantity * unitEur);
+      req = { amount };
+    } else req = { quantity: Number(body.quantity) };
+    const o = buyQuote(chart, fx, date, req);
+    const { exec, quantity, fees } = o;
+    const invested = round(quantity * o.execPrice * exec.fx);
 
     const estimate = {
       symbol: chart.symbol,
       name: chart.name,
       currency: chart.currency,
       date: exec.date,
-      price: exec.price,
+      marketPrice: exec.price, // cours du marché
+      price: o.execPrice, // prix payé, liquidité comprise
       fx: exec.fx,
       quantity,
       invested,
       fees,
+      liquidity: liquidityView(o),
       total: round(invested + fees),
     };
     if (dryRun) return json({ estimate });
 
     const row = await env.DB.prepare(
-      `INSERT INTO positions (portfolio_id, instrument_type, symbol, name, exchange, currency, quantity, buy_date, buy_price, buy_fx, buy_fees)
-       VALUES (?, 'stock', ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      `INSERT INTO positions (portfolio_id, instrument_type, symbol, name, exchange, currency, quantity, buy_date, buy_price, buy_fx, buy_fees, buy_liq)
+       VALUES (?, 'stock', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     )
       .bind(
         pf.id,
@@ -77,9 +71,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         chart.currency,
         quantity,
         exec.date,
-        exec.price,
+        o.execPrice,
         exec.fx,
         fees,
+        o.liquidityCost,
       )
       .first<{ id: number }>();
     return json({ id: row?.id, estimate }, { status: 201 });

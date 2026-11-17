@@ -1,5 +1,6 @@
 import type { Env } from "../../lib/env";
-import { MIN_ORDER_EUR, floorQty, netFromBudget } from "../../lib/fees";
+import { MIN_ORDER_EUR } from "../../lib/fees";
+import { buyQuote } from "../../lib/orders";
 import { HttpError, errorResponse, isIsoDate, json, readJson, todayParis } from "../../lib/http";
 import { PositionRow, executionAt, loadMarket, positionCost } from "../../lib/portfolio";
 import { PortfolioRow, currentPortfolio, portfolioRows } from "../../lib/scope";
@@ -87,14 +88,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         const { chart, fx, exec, open, line } = await lineFor(symbol, date, rows).catch((e) => {
           throw new HttpError(400, `${symbol} : ${(e as Error).message}`);
         });
-        const unitEur = exec.price * exec.fx;
-        const { net, fees } = amount > 0 ? netFromBudget(amount) : { net: 0, fees: 0 };
-        const quantity = amount > 0 ? floorQty(net / unitEur) : 0;
-        const invested = round(quantity * unitEur + fees);
+        // Même calcul qu'un achat normal : frais et coût de liquidité compris.
+        const o = amount > 0 ? buyQuote(chart, fx, date, { amount }) : null;
+        const quantity = o?.quantity ?? 0;
+        const fees = o?.fees ?? 0;
+        const invested = o ? round(quantity * o.execPrice * exec.fx + fees) : 0;
         const valueNow = round(quantity * chart.price * fx.current);
         return {
           chart,
           exec,
+          execPrice: o?.execPrice ?? exec.price,
+          liquidityCost: o?.liquidityCost ?? 0,
           replace: open.map((r) => r.id),
           quantity,
           fees,
@@ -103,6 +107,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
             newAmount: invested,
             quantity,
             fees,
+            liquidityCost: o?.liquidityCost ?? 0,
             valueNow,
             pnl: round(valueNow - invested),
             pnlPct: invested ? round(((valueNow - invested) / invested) * 100) : 0,
@@ -134,8 +139,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       if (p.quantity > 0) {
         stmts.push(
           env.DB.prepare(
-            `INSERT INTO positions (portfolio_id, instrument_type, symbol, name, exchange, currency, quantity, buy_date, buy_price, buy_fx, buy_fees)
-             VALUES (?, 'stock', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO positions (portfolio_id, instrument_type, symbol, name, exchange, currency, quantity, buy_date, buy_price, buy_fx, buy_fees, buy_liq)
+             VALUES (?, 'stock', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           ).bind(
             pf.id,
             p.chart.symbol,
@@ -144,9 +149,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
             p.chart.currency,
             p.quantity,
             p.exec.date,
-            p.exec.price,
+            p.execPrice,
             p.exec.fx,
             p.fees,
+            p.liquidityCost,
           ),
         );
       }

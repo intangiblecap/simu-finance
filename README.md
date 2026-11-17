@@ -36,6 +36,9 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
 - **Fiche action** : cours, variation, graphique (1J, 1S, 1M, 1A, 5A, Max), tes positions sur cette action.
 - **Achat simulé** : par montant en € ou par nombre d'actions, **fractions d'actions autorisées**
   (ex : 15 € d'Apple), à la date de ton choix. Aperçu du cours, de la quantité, des frais et du total avant validation.
+- **Liquidité simulée** : chaque ordre paie la moitié de l'écart achat/vente (estimé à partir du montant échangé
+  par jour) plus un impact sur le prix (règle de la racine carrée). Indicateur de liquidité sur chaque fiche action,
+  avertissement si l'ordre dépasse 1 % des échanges du jour (`lib/liquidity.ts`, `lib/orders.ts`).
 - **Frais de courtage simulés automatiquement** : 0,5 % de chaque ordre (achat et vente), voir `lib/fees.ts`.
 - **Vente simulée** (clôture d'une position, avec annulation possible) et suppression.
 - **Devises** : les actions cotées hors euro (GBp, CHF, SEK, DKK…) sont converties en € avec le taux de change
