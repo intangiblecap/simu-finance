@@ -445,6 +445,7 @@ export function fxAt(fx: FxSeries, date: string): number {
 export function shortName(name: string): string {
   return name
     .replace(/\s+-\s+.*$/, "") // « LVMH Moët Hennessy - Louis Vuitton, … » → « LVMH Moët Hennessy »
+    .replace(/,?\s+(Société en commandite par actions|Société Européenne|Société Anonyme|S\.?C\.?A\.?)$/i, "")
     .replace(/,?\s+(S\.?A\.?|SE|AG|plc|PLC|N\.?V\.?|A\/S|S\.p\.A\.?|SpA|Société Anonyme|Group|Holding)\.?$/i, "")
     .replace(/,?\s+(S\.?A\.?|SE|AG|plc|N\.?V\.?)\.?$/i, "")
     .trim();
