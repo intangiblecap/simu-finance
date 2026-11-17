@@ -1129,7 +1129,7 @@ function listingLine(r) {
     ? `<div class="listing-line"><span class="tag-primary">Cotation principale</span> la plus échangée${cur ? " · " + cur : ""}</div>`
     : `<div class="listing-line muted">Cotation secondaire${cur ? " · " + cur : ""} · moins d'échanges, cours parfois légèrement décalé</div>`;
 }
-const shortNameJs = (n) => String(n).replace(/\s+-\s+.*$/, "").replace(/,?\s+(S\.?A\.?|SE|AG|plc|N\.?V\.?|A\/S|S\.p\.A\.?)\.?$/i, "");
+const shortNameJs = (n) => String(n).replace(/\s+-\s+.*$/, "").replace(/,?\s+(Société en commandite par actions|Société Européenne|Société Anonyme)$/i, "").replace(/,?\s+(S\.?A\.?|SE|AG|plc|N\.?V\.?|A\/S|S\.p\.A\.?)\.?$/i, "");
 
 // ---------- Découvrir : tendances et actions à connaître ----------
 
