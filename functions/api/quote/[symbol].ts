@@ -1,5 +1,6 @@
 import type { Env } from "../../../lib/env";
 import { HttpError, errorResponse, json } from "../../../lib/http";
+import { liquidityAt } from "../../../lib/liquidity";
 import { EUROPEAN_EXCHANGES, Range, exchangeSuffix, getChart, getFx, getSeries, isEuropean } from "../../../lib/yahoo";
 
 const RANGES: Range[] = ["5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "max"];
@@ -17,6 +18,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, params }) => {
 
     const [chart, series] = await Promise.all([getChart(symbol, range), intraday ? getSeries(symbol, intraday) : null]);
     const fx = await getFx(chart.currency, "5d");
+    // Liquidité : 20 dernières séances (montant échangé par jour, volatilité).
+    const [liqChart, liqFx] = await Promise.all([getChart(symbol, "3mo"), getFx(chart.currency, "3mo")]);
+    const liq = liquidityAt(liqChart, liqFx, liqChart.points[liqChart.points.length - 1].date);
     const pts = chart.points;
     const prev = pts.length >= 2 ? pts[pts.length - 2].close : chart.price;
     return json({
@@ -31,6 +35,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, params }) => {
       marketTime: chart.marketTime,
       range: intraday ? rq : range,
       intraday: !!intraday,
+      liquidity: { level: liq.level, adv: liq.adv, spreadPct: Math.round(liq.spread * 10000) / 100, sigmaPct: Math.round(liq.sigma * 10000) / 100 },
       points: series ? series.points : pts.map((p) => ({ t: Date.parse(p.date) / 1000, date: p.date, close: p.close })),
     });
   } catch (e) {

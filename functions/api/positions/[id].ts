@@ -1,7 +1,7 @@
 import type { Env } from "../../../lib/env";
 import { HttpError, errorResponse, isIsoDate, json, readJson, todayParis } from "../../../lib/http";
-import { PositionRow, executionAt, loadMarket } from "../../../lib/portfolio";
-import { orderFees } from "../../../lib/fees";
+import { PositionRow, loadMarket } from "../../../lib/portfolio";
+import { liquidityView, sellQuote } from "../../../lib/orders";
 import { currentPortfolio } from "../../../lib/scope";
 import { round } from "../../../lib/yahoo";
 
@@ -27,7 +27,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
 
     if (body.action === "reopen") {
       await env.DB.prepare(
-        "UPDATE positions SET sell_date = NULL, sell_price = NULL, sell_fx = NULL, sell_fees = 0 WHERE id = ?",
+        "UPDATE positions SET sell_date = NULL, sell_price = NULL, sell_fx = NULL, sell_fees = 0, sell_liq = 0 WHERE id = ?",
       )
         .bind(row.id)
         .run();
@@ -41,24 +41,26 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
     if (date < row.buy_date) throw new HttpError(400, "La vente ne peut pas précéder l'achat");
 
     const { chart, fx } = await loadMarket(row.symbol, row.currency, date);
-    const exec = executionAt(chart, fx, date);
-    const gross = row.quantity * exec.price * exec.fx;
-    const fees = orderFees(gross);
+    const o = sellQuote(chart, fx, date, row.quantity);
+    const { exec, fees } = o;
+    const gross = row.quantity * o.execPrice * exec.fx;
     const proceeds = gross - fees;
     const cost = row.quantity * row.buy_price * row.buy_fx + row.buy_fees;
     const estimate = {
       date: exec.date,
-      price: exec.price,
+      marketPrice: exec.price,
+      price: o.execPrice,
       fx: exec.fx,
       gross: round(gross),
+      liquidity: liquidityView(o),
       fees,
       proceeds: round(proceeds),
       pnl: round(proceeds - cost),
     };
     if (new URL(request.url).searchParams.get("dryRun") === "1") return json({ estimate });
 
-    await env.DB.prepare("UPDATE positions SET sell_date = ?, sell_price = ?, sell_fx = ?, sell_fees = ? WHERE id = ?")
-      .bind(exec.date, exec.price, exec.fx, fees, row.id)
+    await env.DB.prepare("UPDATE positions SET sell_date = ?, sell_price = ?, sell_fx = ?, sell_fees = ?, sell_liq = ? WHERE id = ?")
+      .bind(exec.date, o.execPrice, exec.fx, fees, o.liquidityCost, row.id)
       .run();
     return json({ ok: true, estimate });
   } catch (e) {

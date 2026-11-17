@@ -57,6 +57,7 @@ export const ARTICLES = [
         <tr><td>Date passée</td><td>Clôture de ce jour</td></tr>
         <tr><td>Bourse fermée</td><td>Jour de bourse suivant</td></tr>
       </table>
+      <p>On y ajoute le <a href="#/methode/liquidite">coût de liquidité</a> : tu paies un peu plus cher à l'achat et reçois un peu moins à la vente.</p>
       ${why("La clôture est le prix de référence d'une journée, disponible pour n'importe quelle date.", "Un ordre passé un samedi est exécuté le lundi chez un vrai courtier.")}`,
   },
   {
@@ -74,6 +75,20 @@ export const ARTICLES = [
       </table>
       ${why(`Un pourcentage reste juste pour les petits montants (un forfait de 1 € coûterait ${num(100 / 15, 1)}&nbsp;% d'un achat de 15 €).`, `${T} est l'ordre de grandeur des courtiers en ligne des banques.`, `Un aller-retour coûte environ ${num(((1 + c.feeRate) / (1 - c.feeRate) - 1) * 100)}&nbsp;% : c'est pourquoi un achat récent affiche une petite perte.`)}`;
     },
+  },
+  {
+    id: "liquidite", group: "Calculs", icon: "💧", title: "Liquidité",
+    summary: "Écart achat/vente et impact.",
+    body: () => `
+      <p>Il y a toujours deux prix : celui auquel on peut <b>acheter</b> (un peu plus haut) et celui auquel on peut <b>vendre</b> (un peu plus bas). Moins une action s'échange, plus cet écart est grand.</p>
+      ${formula("prix payé = cours × (1 + ½ écart + impact)", "prix reçu = cours × (1 − ½ écart − impact)")}
+      <table class="tbl num">
+        <tr><th>Échangé par jour</th><th>Écart estimé</th></tr>
+        <tr><td>1 Md€</td><td>0,02 %</td></tr><tr><td>100 M€</td><td>0,06 %</td></tr>
+        <tr><td>10 M€</td><td>0,2 %</td></tr><tr><td>1 M€</td><td>0,8 %</td></tr><tr><td>100 k€ et moins</td><td>2 %</td></tr>
+      </table>
+      ${formula("impact = volatilité quotidienne × √(ton ordre ÷ échangé par jour)")}
+      ${why("Le montant échangé par jour est la médiane des 20 dernières séances, en euros.", "L'impact suit la « règle de la racine carrée » utilisée par les professionnels ; il est négligeable pour de petits ordres.", "Yahoo ne fournit pas les vrais prix d'achat et de vente : l'écart est une estimation, à la bonne échelle.")}`,
   },
   {
     id: "fractions", group: "Calculs", icon: "🍰", title: "Fractions d'actions",

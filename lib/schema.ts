@@ -34,6 +34,14 @@ async function migrate(db: D1Database) {
       db.prepare("CREATE INDEX IF NOT EXISTS idx_positions_portfolio ON positions(portfolio_id)"),
     ]);
   }
+  // 0003 : coût de liquidité de chaque ordre (en €, déjà inclus dans le prix d'exécution).
+  const cols3 = await db.prepare("PRAGMA table_info(positions)").all<{ name: string }>();
+  if (!cols3.results.some((c) => c.name === "buy_liq")) {
+    await db.batch([
+      db.prepare("ALTER TABLE positions ADD COLUMN buy_liq REAL NOT NULL DEFAULT 0"),
+      db.prepare("ALTER TABLE positions ADD COLUMN sell_liq REAL NOT NULL DEFAULT 0"),
+    ]);
+  }
   // Toujours au moins un portefeuille.
   await db
     .prepare(

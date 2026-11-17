@@ -25,6 +25,7 @@ export const eurostatBase = () => EU;
 export interface PricePoint {
   date: string; // YYYY-MM-DD (heure locale de la place de cotation)
   close: number;
+  volume?: number; // nombre de titres échangés ce jour-là (si connu)
 }
 
 export interface Chart {
@@ -155,18 +156,22 @@ export async function getChart(symbol: string, range: Range = "1y"): Promise<Cha
   const ts: number[] = result.timestamp ?? [];
   const closes: (number | null)[] = result.indicators?.quote?.[0]?.close ?? [];
 
-  const byDate = new Map<string, number>();
+  const volumes: (number | null)[] = result.indicators?.quote?.[0]?.volume ?? [];
+  const perWeek = iv === "1wk" ? 5 : 1; // en hebdomadaire, on ramène le volume à une journée
+  const byDate = new Map<string, { c: number; v?: number }>();
   ts.forEach((t, i) => {
     const c = closes[i];
-    if (c != null && Number.isFinite(c)) byDate.set(toLocalDate(t, gmt), c);
+    const v = volumes[i];
+    if (c != null && Number.isFinite(c)) byDate.set(toLocalDate(t, gmt), { c, v: v != null && v > 0 ? v / perWeek : undefined });
   });
   // Le dernier cours "live" remplace la clôture du jour en cours.
   if (meta.regularMarketPrice != null && meta.regularMarketTime) {
-    byDate.set(toLocalDate(meta.regularMarketTime, gmt), meta.regularMarketPrice);
+    const d = toLocalDate(meta.regularMarketTime, gmt);
+    byDate.set(d, { c: meta.regularMarketPrice, v: byDate.get(d)?.v });
   }
-  const points = [...byDate.entries()]
+  const points: PricePoint[] = [...byDate.entries()]
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-    .map(([date, close]) => ({ date, close: round(close, 6) }));
+    .map(([date, { c, v }]) => (v ? { date, close: round(c, 6), volume: v } : { date, close: round(c, 6) }));
 
   if (!points.length) throw new MarketDataError("Pas de cotation disponible pour cet instrument", 404);
 
