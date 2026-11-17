@@ -31,6 +31,8 @@ Données de marché : **Yahoo Finance** (endpoints non officiels, sans clé).
   (liste dans `lib/universe.ts`).
 - **Recherche** d'actions sur les bourses européennes (Euronext Paris/Amsterdam/Bruxelles/Lisbonne/Milan,
   XETRA, Madrid, SIX, Londres, places nordiques…). Saisie directe d'un ticker Yahoo possible (ex : `ITX.MC`).
+  Quand une société est cotée sur plusieurs bourses, la **cotation principale** (la plus échangée, en euros)
+  est mise en avant et les cotations secondaires sont expliquées.
 - **Fiche action** : cours, variation, graphique (1J, 1S, 1M, 1A, 5A, Max), tes positions sur cette action.
 - **Achat simulé** : par montant en € ou par nombre d'actions, **fractions d'actions autorisées**
   (ex : 15 € d'Apple), à la date de ton choix. Aperçu du cours, de la quantité, des frais et du total avant validation.

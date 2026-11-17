@@ -43,6 +43,13 @@ export interface SearchResult {
   name: string;
   exchange: string;
   type: string;
+  // Renseigné quand la même société est cotée sur plusieurs bourses.
+  listing?: {
+    group: string; // identifiant du groupe de cotations d'une même société
+    count: number; // nombre de cotations dans les résultats
+    role: "primary" | "secondary";
+    currency: string;
+  };
 }
 
 // Places européennes acceptées (suffixe du ticker Yahoo -> libellé).
@@ -260,6 +267,7 @@ export interface SparkQuote {
   prevClose: number; // clôture de la séance précédente
   changePct: number; // variation sur la dernière séance
   marketTime: number;
+  volume: number; // volume échangé sur la dernière séance (en nombre de titres)
   closes: number[]; // cours de la dernière séance (pas de 15 min), pour les mini-graphiques
 }
 
@@ -292,6 +300,7 @@ export async function getSpark(symbols: string[]): Promise<SparkQuote[]> {
       prevClose: prev,
       changePct: prev ? round(((m.regularMarketPrice - prev) / prev) * 100, 2) : 0,
       marketTime: m.regularMarketTime ?? 0,
+      volume: m.regularMarketVolume ?? 0,
       closes: closes.map((c) => round(c, 4)),
     });
   }
@@ -327,7 +336,57 @@ export async function search(q: string): Promise<SearchResult[]> {
       /* ticker inconnu : on ignore */
     }
   }
-  return results;
+  return annotateListings(results);
+}
+
+// Places où les sociétés étrangères ne sont presque jamais cotées à titre principal.
+const SECONDARY_VENUES = new Set(["F", "VI"]);
+
+// Une même société peut apparaître plusieurs fois (cotation principale + cotations secondaires).
+// On regroupe ces doublons, on identifie la cotation principale (la plus échangée en euros,
+// hors places secondaires) et on la place en tête du groupe.
+async function annotateListings(results: SearchResult[]): Promise<SearchResult[]> {
+  const keyOf = (r: SearchResult) => shortName(r.name).toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, "");
+  const groups = new Map<string, SearchResult[]>();
+  for (const r of results) groups.set(keyOf(r), [...(groups.get(keyOf(r)) ?? []), r]);
+  const dup = [...groups.values()].filter((g) => g.length > 1);
+  if (!dup.length) return results;
+
+  const quotes = await getSpark(dup.flat().map((r) => r.symbol)).catch(() => [] as SparkQuote[]);
+  const bySym = new Map(quotes.map((q) => [q.symbol, q]));
+  const fx = new Map<string, number>();
+  await Promise.all(
+    [...new Set(quotes.map((q) => q.currency))].map(async (c) => fx.set(c, (await getFx(c, "5d").catch(() => null))?.current ?? 0)),
+  );
+
+  for (const [key, g] of groups) {
+    if (g.length < 2) continue;
+    const turnover = (r: SearchResult) => {
+      const q = bySym.get(r.symbol);
+      return q ? q.volume * q.price * (fx.get(q.currency) ?? 0) : 0;
+    };
+    const main = g.filter((r) => !SECONDARY_VENUES.has(exchangeSuffix(r.symbol)!));
+    const primary = (main.length ? main : g).reduce((a, b) => (turnover(b) > turnover(a) ? b : a));
+    for (const r of g) {
+      r.listing = {
+        group: key,
+        count: g.length,
+        role: r === primary ? "primary" : "secondary",
+        currency: bySym.get(r.symbol)?.currency ?? "",
+      };
+    }
+    // Cotation principale en tête de son groupe, le groupe à la place de sa première cotation.
+    g.sort((a, b) => (a === primary ? -1 : b === primary ? 1 : 0));
+  }
+  const out: SearchResult[] = [];
+  const done = new Set<string>();
+  for (const r of results) {
+    const k = keyOf(r);
+    if (done.has(k)) continue;
+    done.add(k);
+    out.push(...groups.get(k)!);
+  }
+  return out;
 }
 
 // ---------- Devises ----------
